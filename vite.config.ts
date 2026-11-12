@@ -17,6 +17,8 @@ export default defineConfig({
         offscreen: resolve(__dirname, 'src/offscreen/offscreen.html'),
         popup: resolve(__dirname, 'src/popup/popup.html'),
         options: resolve(__dirname, 'src/options/options.html'),
+        // Development only: BENCH=1 pnpm run build adds a page that measures the browser models.
+        ...(process.env.BENCH ? { bench: resolve(__dirname, 'src/dev/bench.html') } : {}),
       },
       output: { entryFileNames: '[name].js', chunkFileNames: 'chunks/[name]-[hash].js', assetFileNames: 'assets/[name]-[hash][extname]' },
     },

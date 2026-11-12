@@ -87,6 +87,11 @@ export class BrowserBackend implements Backend {
     });
   }
 
+  /** Changes the language of the audio without reloading the model. */
+  setSourceLang(language: string) {
+    this.options.sourceLang = language;
+  }
+
   async transcribe(samples: Float32Array): Promise<TranscribeResult> {
     // Copy: the worker takes the buffer, and the caller may still hold the samples.
     const copy = samples.slice();

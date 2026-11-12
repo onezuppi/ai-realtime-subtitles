@@ -57,8 +57,17 @@ export async function loadQwen3(repo: string, host: string, wasmBase: string, gp
   // The embedding table is only a lookup, so it stays off the video memory.
   const embed = await ort.InferenceSession.create(await fetchFile(FILES.embed), { executionProviders: ['wasm'] });
   const decoderData = await fetchFile(FILES.decoderData);
+  // The key-value cache stays in video memory between steps. Copying it to the CPU and back every token is what made decoding slow.
+  const preferredOutputLocation: Record<string, 'gpu-buffer'> = {};
+  if (gpu) {
+    for (let layer = 0; layer < 28; layer++) {
+      preferredOutputLocation[`present.${layer}.key`] = 'gpu-buffer';
+      preferredOutputLocation[`present.${layer}.value`] = 'gpu-buffer';
+    }
+  }
   const decoder = await ort.InferenceSession.create(await fetchFile(FILES.decoder), {
     ...accelerated,
+    preferredOutputLocation,
     externalData: [{ path: 'decoder_model_merged_q4.onnx_data', data: decoderData }],
   });
   return { ort: ort as never, encoder, embed, decoder, tokenizer } as unknown as Qwen3Parts;
