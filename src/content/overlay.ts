@@ -1,6 +1,8 @@
 import { DEFAULT_SETTINGS, loadSettings, type Message, type Settings } from '../messages';
 import { clampBox, defaultBox, fontSizeFor, MIN_WIDTH, OVERLAY_BOX_KEY as KEY, type Box } from './geometry';
-const HIDE_MS = (text: string) => Math.min(8000, Math.max(3000, text.length * 80));
+import { openCaptionWindow, pipSupported, type CaptionWindow } from './pip';
+
+const HIDE_MS =(text: string) => Math.min(8000, Math.max(3000, text.length * 80));
 
 // The script can be injected more than once: keep a single overlay and a single listener.
 const guard = globalThis as unknown as { __subtitleOverlay?: boolean };
@@ -24,14 +26,27 @@ function createOverlay(initial: Box, initialSettings: Settings) {
       .grip { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize; opacity: 0;
         background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,.8) 50%); border-radius: 0 0 .4em 0; }
       .box:hover .grip { opacity: 1; }
+      .pip { position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; padding: 3px; border: 0; border-radius: 5px;
+        background: rgba(255,255,255,.14); color: #fff; opacity: 0; cursor: pointer; display: none; }
+      .box:hover .pip { opacity: 1; }
+      .pip:hover { background: rgba(255,255,255,.3); }
+      .pip[aria-pressed="true"] { background: rgba(111,148,255,.7); }
+      .pip svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; }
     </style>
-    <div class="box" part="box"><span class="text"></span><div class="grip"></div></div>`;
+    <div class="box" part="box"><span class="text"></span>
+      <button class="pip" type="button" aria-label="Show subtitles in a Picture-in-Picture window" title="Picture-in-Picture" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="11" y="11" width="8" height="6" rx="1" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <div class="grip"></div></div>`;
   document.documentElement.append(host);
 
   const box = root.querySelector<HTMLDivElement>('.box')!;
   const text = root.querySelector<HTMLSpanElement>('.text')!;
   const grip = root.querySelector<HTMLDivElement>('.grip')!;
+  const pipButton = root.querySelector<HTMLButtonElement>('.pip')!;
   let geometry = initial;
+  let pipWindow: CaptionWindow | null = null;
+  let lastText = '';
   let fontScale = initialSettings.fontScale;
   box.style.setProperty('--opacity', String(initialSettings.opacity));
 
@@ -66,8 +81,22 @@ function createOverlay(initial: Box, initialSettings: Settings) {
     addEventListener('pointerup', onUp);
   };
 
+  if (pipSupported()) pipButton.style.display = 'block';
+  pipButton.addEventListener('pointerdown', event => event.stopPropagation());
+  pipButton.addEventListener('click', async () => {
+    if (pipWindow) {
+      pipWindow.close();
+      return;
+    }
+    pipWindow = await openCaptionWindow(() => {
+      pipWindow = null;
+      pipButton.setAttribute('aria-pressed', 'false');
+    }, lastText);
+    if (pipWindow) pipButton.setAttribute('aria-pressed', 'true');
+  });
+
   box.addEventListener('pointerdown', event => {
-    if (event.target === grip) return;
+    if (event.target === grip || pipButton.contains(event.target as Node)) return;
     drag(event, (dx, dy, start) => ({ ...start, x: start.x + dx, y: start.y + dy }));
   });
   grip.addEventListener('pointerdown', event => {
@@ -81,7 +110,12 @@ function createOverlay(initial: Box, initialSettings: Settings) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const scheduleHide = () => {
     clearTimeout(timer);
-    if (text.textContent) timer = setTimeout(() => (box.style.display = 'none'), HIDE_MS(text.textContent));
+    if (text.textContent) {
+      timer = setTimeout(() => {
+        box.style.display = 'none';
+        pipWindow?.setText('');
+      }, HIDE_MS(text.textContent));
+    }
   };
   box.addEventListener('pointerenter', () => clearTimeout(timer));
   box.addEventListener('pointerleave', scheduleHide);
@@ -96,6 +130,8 @@ function createOverlay(initial: Box, initialSettings: Settings) {
       apply();
     },
     show(value: string) {
+      lastText = value;
+      pipWindow?.setText(value);
       text.textContent = value;
       box.style.display = value ? 'block' : 'none';
       apply();
