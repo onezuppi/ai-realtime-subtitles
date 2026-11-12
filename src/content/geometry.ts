@@ -7,6 +7,9 @@ export interface Box {
   width: number;
 }
 
+/** Storage key of the saved box. */
+export const OVERLAY_BOX_KEY = 'overlayBox';
+
 export const MIN_WIDTH = 160;
 export const FONT_PER_WIDTH = 1 / 28;
 

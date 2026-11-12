@@ -1,32 +1,49 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Subtitles</title>
+    <link rel="stylesheet" href="../ui/theme.css" />
     <style>
-      body { width: 260px; margin: 12px; font: 14px system-ui, sans-serif; }
-      label { display: block; margin: 8px 0 2px; font-size: 12px; opacity: .7; }
-      select, button { width: 100%; padding: 6px; box-sizing: border-box; }
-      button { margin-top: 12px; }
-      .hint { margin-top: 4px; font-size: 11px; opacity: .6; line-height: 1.35; }
-      #state { margin-top: 8px; font-size: 12px; min-height: 1.4em; }
+      body { width: 320px; padding: 14px; display: grid; gap: 12px; }
+      header { display: flex; align-items: center; justify-content: space-between; }
+      header h1 { font-size: 15px; }
+      #settings { padding: 4px 8px; border: 0; background: transparent; color: var(--text-2); font-size: 12px; }
+      #settings:hover { color: var(--text); text-decoration: underline; }
+      #toggle { width: 100%; padding: 12px; font-size: 15px; }
+      #detail { margin: 0; font-size: 12px; color: var(--danger); word-break: break-word; }
+      #detail:empty { display: none; }
     </style>
   </head>
   <body>
-    <label for="mode">Mode</label>
-    <select id="mode">
-      <option value="http">Program on this computer (HTTP)</option>
-      <option value="native">Program via bridge (works in Tor windows)</option>
-      <option value="browser" disabled>Browser only (soon)</option>
-    </select>
-    <div class="hint">Use the bridge when the browser cannot reach this computer over HTTP, for example behind a VPN extension or in a Tor window. Install it with companion\install-bridge.cmd.</div>
-    <label for="lang">Translate to</label>
-    <select id="lang">
-      <option value="en">English</option>
-      <option value="ru">Russian</option>
-    </select>
-    <button id="toggle">Start</button>
-    <div id="state"></div>
+    <header>
+      <h1>Realtime subtitles</h1>
+      <span id="state" class="pill" data-state="off">Off</span>
+    </header>
+
+    <button id="toggle" class="btn btn-primary">Start subtitles</button>
+    <p id="detail" role="alert"></p>
+
+    <section class="card">
+      <span class="label" id="mode-label">Where recognition runs</span>
+      <div class="segmented" id="mode" role="radiogroup" aria-labelledby="mode-label">
+        <button role="radio" data-value="browser" disabled title="Not available yet">Browser</button>
+        <button role="radio" data-value="http">Computer</button>
+        <button role="radio" data-value="native">Bridge</button>
+      </div>
+      <p class="hint" id="mode-hint"></p>
+    </section>
+
+    <section class="card">
+      <label class="label" for="lang">Translate to</label>
+      <select id="lang">
+        <option value="en">English</option>
+        <option value="ru">Russian</option>
+      </select>
+    </section>
+
+    <button id="settings" type="button">Settings</button>
     <script type="module" src="./popup.ts"></script>
   </body>
 </html>

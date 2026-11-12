@@ -15,6 +15,7 @@ export default defineConfig({
         'capture-worklet': resolve(__dirname, 'src/offscreen/capture-worklet.ts'),
         offscreen: resolve(__dirname, 'src/offscreen/offscreen.html'),
         popup: resolve(__dirname, 'src/popup/popup.html'),
+        options: resolve(__dirname, 'src/options/options.html'),
       },
       output: { entryFileNames: '[name].js', chunkFileNames: 'chunks/[name]-[hash].js', assetFileNames: 'assets/[name]-[hash][extname]' },
     },

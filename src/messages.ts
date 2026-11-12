@@ -4,11 +4,15 @@ export interface Settings {
   mode: BackendKind;
   /** Target language of the captions, for example "en" or "ru". */
   targetLang: string;
+  /** Opacity of the caption background, 0.1 to 1. */
+  opacity: number;
+  /** Multiplier of the caption text size, 0.6 to 2. */
+  fontScale: number;
   /** Development only: listen to the default microphone instead of the tab (used with a fake audio device in tests). */
   debugAudio?: 'microphone';
 }
 
-export const DEFAULT_SETTINGS: Settings = { mode: 'http', targetLang: 'en' };
+export const DEFAULT_SETTINGS: Settings = { mode: 'http', targetLang: 'en', opacity: 0.55, fontScale: 1 };
 
 export async function loadSettings(): Promise<Settings> {
   const stored = await chrome.storage.local.get('settings');

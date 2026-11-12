@@ -1,7 +1,5 @@
-import type { Message } from '../messages';
-import { clampBox, defaultBox, DEFAULT_OPACITY, fontSizeFor, MIN_WIDTH, type Box } from './geometry';
-
-const KEY = 'overlayBox';
+import { DEFAULT_SETTINGS, loadSettings, type Message, type Settings } from '../messages';
+import { clampBox, defaultBox, fontSizeFor, MIN_WIDTH, OVERLAY_BOX_KEY as KEY, type Box } from './geometry';
 const HIDE_MS = (text: string) => Math.min(8000, Math.max(3000, text.length * 80));
 
 // The script can be injected more than once: keep a single overlay and a single listener.
@@ -12,7 +10,7 @@ async function loadBox(): Promise<Box> {
   return clampBox(stored ?? defaultBox(innerWidth, innerHeight), innerWidth, innerHeight);
 }
 
-function createOverlay(initial: Box) {
+function createOverlay(initial: Box, initialSettings: Settings) {
   const host = document.createElement('div');
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none';
   const root = host.attachShadow({ mode: 'closed' });
@@ -33,12 +31,18 @@ function createOverlay(initial: Box) {
   const box = root.querySelector<HTMLDivElement>('.box')!;
   const text = root.querySelector<HTMLSpanElement>('.text')!;
   const grip = root.querySelector<HTMLDivElement>('.grip')!;
-  box.style.setProperty('--opacity', String(DEFAULT_OPACITY));
   let geometry = initial;
+  let fontScale = initialSettings.fontScale;
+  box.style.setProperty('--opacity', String(initialSettings.opacity));
 
   const apply = () => {
     geometry = clampBox(geometry, innerWidth, innerHeight, box.offsetHeight || 40);
-    Object.assign(box.style, { left: `${geometry.x}px`, top: `${geometry.y}px`, width: `${geometry.width}px`, fontSize: `${fontSizeFor(geometry.width)}px` });
+    Object.assign(box.style, {
+      left: `${geometry.x}px`,
+      top: `${geometry.y}px`,
+      width: `${geometry.width}px`,
+      fontSize: `${Math.round(fontSizeFor(geometry.width) * fontScale)}px`,
+    });
   };
   const save = () => void chrome.storage.local.set({ [KEY]: geometry });
 
@@ -82,6 +86,15 @@ function createOverlay(initial: Box) {
   box.addEventListener('pointerenter', () => clearTimeout(timer));
   box.addEventListener('pointerleave', scheduleHide);
   return {
+    applySettings(settings: Settings) {
+      fontScale = settings.fontScale;
+      box.style.setProperty('--opacity', String(settings.opacity));
+      apply();
+    },
+    resetBox() {
+      geometry = defaultBox(innerWidth, innerHeight);
+      apply();
+    },
     show(value: string) {
       text.textContent = value;
       box.style.display = value ? 'block' : 'none';
@@ -93,10 +106,15 @@ function createOverlay(initial: Box) {
 
 if (!guard.__subtitleOverlay) {
   guard.__subtitleOverlay = true;
-  void loadBox().then(initial => {
-    const overlay = createOverlay(initial);
+  void Promise.all([loadBox(), loadSettings()]).then(([initial, settings]) => {
+    const overlay = createOverlay(initial, settings);
     chrome.runtime.onMessage.addListener((message: Message) => {
       if (message.type === 'caption') overlay.show(message.text);
+    });
+    // Changes made in the settings page apply at once, without reloading the tab.
+    chrome.storage.onChanged.addListener(changes => {
+      if (changes.settings) overlay.applySettings({ ...DEFAULT_SETTINGS, ...(changes.settings.newValue as Partial<Settings>) });
+      if (KEY in changes && !changes[KEY]?.newValue) overlay.resetBox();
     });
   });
 }

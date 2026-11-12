@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Subtitles settings</title>
+    <link rel="stylesheet" href="../ui/theme.css" />
+    <style>
+      body { padding: 32px 16px 64px; }
+      main { max-width: 640px; margin: 0 auto; display: grid; gap: 16px; }
+      h1 { font-size: 22px; }
+      h2 { font-size: 15px; margin-bottom: 12px; }
+      .row { display: grid; gap: 4px; margin-bottom: 14px; }
+      .row:last-child { margin-bottom: 0; }
+      .value { float: right; font-weight: 500; color: var(--text); }
+      .actions { display: flex; gap: 8px; margin-top: 14px; }
+      .preview-wrap { position: relative; margin-top: 14px; height: 110px; border-radius: var(--radius-sm); overflow: hidden;
+        background: linear-gradient(135deg, #2b5876, #4e4376 55%, #c06c84); display: grid; place-items: center; }
+      .preview { padding: .45em .9em; border-radius: .5em; color: #fff; font-weight: 600; text-align: center; max-width: 86%;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, .8); backdrop-filter: blur(4px); }
+      #saved { font-size: 12px; color: var(--ok); min-height: 1.2em; }
+      code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Realtime subtitles</h1>
+
+      <section class="card">
+        <h2>Captions</h2>
+        <div class="row">
+          <label class="label" for="opacity">Background opacity <span class="value" id="opacity-value"></span></label>
+          <input id="opacity" type="range" min="0.1" max="1" step="0.05" />
+        </div>
+        <div class="row">
+          <label class="label" for="fontScale">Text size <span class="value" id="fontScale-value"></span></label>
+          <input id="fontScale" type="range" min="0.6" max="2" step="0.1" />
+        </div>
+        <div class="preview-wrap"><div class="preview" id="preview">Preview of a caption</div></div>
+        <p class="hint">Drag the caption on the page to move it. Drag its bottom-right corner to resize it.</p>
+        <div class="actions"><button id="reset-position" class="btn" type="button">Reset position and size</button></div>
+      </section>
+
+      <section class="card">
+        <h2>Translation</h2>
+        <div class="row">
+          <label class="label" for="lang">Translate to</label>
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="ru">Russian</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Companion program</h2>
+        <p class="hint" style="margin-top: 0">
+          In the "Computer" mode the extension talks to model servers on <code>127.0.0.1:8083</code> (speech) and
+          <code>127.0.0.1:8082</code> (translation). In the "Bridge" mode it talks to the companion program through the browser
+          instead, which works behind a VPN extension or in a Tor window. Install the bridge with <code>companion/install-bridge</code>.
+        </p>
+      </section>
+
+      <div id="saved" role="status"></div>
+    </main>
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>
