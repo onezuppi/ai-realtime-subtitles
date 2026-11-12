@@ -3,13 +3,20 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 
 def app_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".config")
-    path = Path(base) / "ai-realtime-subtitles"
+    """Per-user data folder: %LOCALAPPDATA% on Windows, ~/Library/Application Support on macOS, ~/.config on Linux."""
+    if os.environ.get("LOCALAPPDATA"):
+        base = Path(os.environ["LOCALAPPDATA"])
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    path = base / "ai-realtime-subtitles"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import signal
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -26,17 +28,23 @@ def find_llama_server(config: Config) -> Path:
                 raise SetupError(f"llama-server not found: {path}")
             return path
     on_path = shutil.which("llama-server")
-    if on_path:
+    if on_path:  # for example `brew install llama.cpp` on macOS
         return Path(on_path)
-    # Prefer the Vulkan build: the plain AVX2 build runs on the CPU only.
-    found = []
-    for folder in LM_STUDIO_BACKENDS.glob("llama.cpp-win-x86_64-vulkan-avx2-*"):
-        match = re.search(r"-(\d+)\.(\d+)\.(\d+)$", folder.name)
-        if match and (folder / "llama-server.exe").exists():
-            found.append((tuple(int(part) for part in match.groups()), folder / "llama-server.exe"))
-    if not found:
-        raise SetupError("llama-server not found. Set llama_server in config.json or add it to PATH.")
-    return max(found)[1]
+    # LM Studio keeps llama.cpp builds per platform. Prefer GPU builds: the plain AVX2 build runs on the CPU only.
+    patterns = {
+        "win32": ["llama.cpp-win-x86_64-vulkan-avx2-*"],
+        "darwin": ["llama.cpp-mac-arm64-apple-metal-advsimd-*"],
+    }.get(sys.platform, ["llama.cpp-linux-x86_64-vulkan-avx2-*", "llama.cpp-linux-x86_64-avx2-*"])
+    exe = "llama-server.exe" if sys.platform == "win32" else "llama-server"
+    for pattern in patterns:
+        found = []
+        for folder in LM_STUDIO_BACKENDS.glob(pattern):
+            match = re.search(r"-(\d+)\.(\d+)\.(\d+)$", folder.name)
+            if match and (folder / exe).exists():
+                found.append((tuple(int(part) for part in match.groups()), folder / exe))
+        if found:
+            return max(found)[1]
+    raise SetupError("llama-server not found. Set llama_server in config.json, set LLAMA_SERVER, or add it to PATH.")
 
 
 def model_files(config: Config) -> list[Path]:
@@ -79,10 +87,15 @@ def start(config: Config, wait_seconds: float = 90) -> dict[str, bool]:
         model_files(config)
         commands = build_commands(config, find_llama_server(config))
         log = open(app_dir() / "servers.log", "ab")
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        # Detach the servers from this process so they survive when the browser closes the bridge.
+        detach = (
+            {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP}
+            if sys.platform == "win32"
+            else {"start_new_session": True}
+        )
         pids = []
         for name in pending:
-            process = subprocess.Popen(commands[name], stdout=log, stderr=log, stdin=subprocess.DEVNULL, creationflags=flags)
+            process = subprocess.Popen(commands[name], stdout=log, stderr=log, stdin=subprocess.DEVNULL, **detach)
             pids.append(process.pid)
         _pid_file().write_text("\n".join(map(str, pids)), encoding="utf-8")
     deadline = time.monotonic() + wait_seconds
@@ -101,12 +114,12 @@ def stop() -> int:
         return 0
     stopped = 0
     for line in path.read_text(encoding="utf-8").split():
-        if os.name == "nt":
+        if sys.platform == "win32":
             result = subprocess.run(["taskkill", "/PID", line, "/T", "/F"], capture_output=True)
             stopped += result.returncode == 0
         else:
             try:
-                os.kill(int(line), 15)
+                os.killpg(int(line), signal.SIGTERM)  # each server leads its own session and process group
                 stopped += 1
             except OSError:
                 pass

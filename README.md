@@ -56,17 +56,34 @@ python -m ai_subtitles_companion stop
 
 Мост обходит сеть. Браузер сам запускает программу и общается с ней через канал ввода-вывода (Native Messaging). Сетевых запросов нет, поэтому VPN и прокси не мешают. Программа сама запускает серверы моделей при первом обращении.
 
-**Как поставить.** Нужен Python 3.10 или новее. Дважды щёлкните `companion\install-bridge.cmd` или выполните из папки `companion`:
+**Как поставить.** Нужен Python 3.10 или новее. Работает в Windows, macOS и Linux. Права администратора не нужны.
 
-```powershell
-.\install-bridge.cmd              # показать, что будет сделано, спросить подтверждение и поставить
-.\install-bridge.cmd check        # проверить регистрацию и серверы
-.\install-bridge.cmd uninstall    # удалить
+Windows: дважды щёлкните `companion\install-bridge.cmd` или выполните его из PowerShell по полному пути.
+macOS и Linux: `sh companion/install-bridge.sh`.
+
+```
+install-bridge     # показать найденные браузеры, дать выбрать, спросить подтверждение и поставить
+install-bridge check        # проверить регистрацию и серверы
+install-bridge uninstall    # удалить
 ```
 
-Скрипт определяет установленные Chrome, Brave и Edge, пишет по одному ключу реестра на браузер в `HKEY_CURRENT_USER` (права администратора не нужны) и кладёт манифест хоста в `%LOCALAPPDATA%\ai-realtime-subtitles`. Использовать мост может только расширение с ID `fdpmchjhigcggmmcilchcakdnocflcbf` (закреплён ключом в `public/manifest.json`). Мост принимает только фиксированные цели (`asr`, `translate`, `companion`) и пути, произвольные адреса запрещены.
+Скрипт находит установленные Chrome, Chromium, Brave и Edge и предлагает выбрать, для каких ставить: номера через запятую, Enter для всех, `q` для отмены. Ключ `--browser brave` задаёт браузер сразу, `--yes` убирает вопросы.
+
+Куда пишется регистрация:
+
+| Система | Что создаётся |
+|---|---|
+| Windows | по одному ключу реестра на браузер в `HKEY_CURRENT_USER\Software\...\NativeMessagingHosts`, манифест и `host.bat` в `%LOCALAPPDATA%\ai-realtime-subtitles` |
+| macOS | манифест в `~/Library/Application Support/<браузер>/NativeMessagingHosts`, `host.sh` в `~/Library/Application Support/ai-realtime-subtitles` |
+| Linux | манифест в `~/.config/<браузер>/NativeMessagingHosts`, `host.sh` в `~/.config/ai-realtime-subtitles` |
+
+Браузеры из Snap и Flatpak на Linux используют другие папки профиля, и стандартная регистрация для них не подходит. Для них путь надо задать вручную.
+
+Использовать мост может только расширение с ID `fdpmchjhigcggmmcilchcakdnocflcbf` (закреплён ключом в `public/manifest.json`). Мост принимает только фиксированные цели (`asr`, `translate`, `companion`) и пути, произвольные адреса запрещены.
 
 После установки перезапустите браузер и выберите в popup расширения режим "Program via bridge".
+
+Поиск `llama-server` на других системах: `llama_server` в настройках, переменная `LLAMA_SERVER`, `PATH` (на macOS подойдёт `brew install llama.cpp`), затем сборки LM Studio для этой системы.
 
 ## Проверка в отдельном браузере
 
