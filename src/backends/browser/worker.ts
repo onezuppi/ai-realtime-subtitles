@@ -89,7 +89,9 @@ async function transcribe(samples: Float32Array, language: string): Promise<stri
   if (asrId === 'whisper-small' && language === 'auto') language = (await detectWhisperLanguage(samples)) ?? 'auto';
   if (asrId === 'qwen3-asr') {
     if (!qwen3) throw new Error('The speech model is not loaded');
-    return (await transcribeQwen3(qwen3, samples, language === 'auto' ? null : language)).text;
+    // Same cap as for Whisper: a model that loops on noise must stop after the number of tokens speech can hold.
+    const cap = Math.min(200, 20 + Math.ceil((samples.length / 16000) * 12));
+    return (await transcribeQwen3(qwen3, samples, language === 'auto' ? null : language, cap)).text;
   }
   if (!recognizer) throw new Error('The speech model is not loaded');
   // Speech has a limited number of tokens per second. The cap and the repeat block stop Whisper from looping on noise and on Chinese.
