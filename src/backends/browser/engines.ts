@@ -15,6 +15,8 @@ export interface AsrEngine {
   /** The model cannot detect the language and needs it from the settings. */
   needsLanguage: boolean;
   languages: string;
+  /** Language codes the model can recognise. Missing means "many, detected by itself". */
+  sourceCodes?: string[];
   /** False while the engine has no runner. */
   available: boolean;
   note: string;
@@ -41,18 +43,19 @@ export const ASR_ENGINES: Record<AsrEngineId, AsrEngine> = {
     needsLanguage: false,
     languages: '99 languages, detects the language by itself',
     available: true,
-    note: 'Smallest download. Quality drops on fast speech and on ja and zh.',
+    note: 'Smallest download. Works without WebGPU, but slowly.',
   },
   cohere: {
     id: 'cohere',
     label: 'Cohere Transcribe 2B',
     repo: 'onnx-community/cohere-transcribe-03-2026-ONNX',
     dtype: 'q4f16',
-    sizeMB: 1460,
+    sizeMB: 1540,
     needsLanguage: true,
-    languages: '14 languages, the language must be chosen',
+    languages: '14 languages (no Russian), the language must be chosen',
+    sourceCodes: ['ar', 'de', 'el', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'vi', 'zh'],
     available: true,
-    note: 'Needs WebGPU. Best quality of the browser engines on es, de and ja in our tests.',
+    note: 'Needs WebGPU. Weaker on Chinese in our earlier tests.',
   },
   'qwen3-asr': {
     id: 'qwen3-asr',
@@ -63,7 +66,7 @@ export const ASR_ENGINES: Record<AsrEngineId, AsrEngine> = {
     needsLanguage: false,
     languages: '30 languages, detects the language by itself',
     available: false,
-    note: 'Transformers.js has no runner for this model yet. A custom runner is planned.',
+    note: 'The published Transformers.js has no runner for this model. It works in the Computer and Bridge modes.',
   },
 };
 

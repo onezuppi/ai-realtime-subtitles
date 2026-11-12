@@ -52,7 +52,10 @@ const modelHost = $<HTMLInputElement>('modelHost');
 for (const option of SOURCE_LANGUAGES) sourceLang.add(new Option(option.label, option.code));
 sourceLang.value = settings.sourceLang;
 modelHost.value = settings.modelHost;
-sourceLang.addEventListener('change', () => void update({ sourceLang: sourceLang.value }));
+sourceLang.addEventListener('change', async () => {
+  await update({ sourceLang: sourceLang.value });
+  updateSourceHint();
+});
 modelHost.addEventListener('change', () => void update({ modelHost: modelHost.value.trim() || DEFAULT_SETTINGS.modelHost }));
 
 interface Row {
@@ -180,9 +183,12 @@ function addRow(container: HTMLElement, ref: ModelRef) {
 
 function updateSourceHint() {
   const engine = ASR_ENGINES[settings.asrEngine];
-  $('source-hint').textContent = engine.needsLanguage
-    ? `${engine.label} cannot detect the language. Choose the language of the audio.`
-    : 'Automatic detection works for this model. Choose a language only if it guesses wrong.';
+  const unsupported = engine.sourceCodes && settings.sourceLang !== 'auto' && !engine.sourceCodes.includes(settings.sourceLang);
+  $('source-hint').textContent = unsupported
+    ? `${engine.label} does not support this language. Pick another speech model or language.`
+    : engine.needsLanguage
+      ? `${engine.label} cannot detect the language. Choose the language of the audio.`
+      : 'Automatic detection works for this model. Choose a language only if it guesses wrong.';
 }
 
 for (const id of Object.keys(ASR_ENGINES) as (keyof typeof ASR_ENGINES)[]) addRow($('asr-models'), { kind: 'asr', id });

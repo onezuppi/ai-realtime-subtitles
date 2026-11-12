@@ -30,6 +30,11 @@ async function requireDownloaded(settings: Settings): Promise<void> {
   if (!(await isDownloaded({ kind: 'asr', id: settings.asrEngine }))) missing.push(ASR_ENGINES[settings.asrEngine].label);
   if (settings.mtEngine !== 'none' && !(await isDownloaded({ kind: 'mt', id: settings.mtEngine }))) missing.push(MT_ENGINES[settings.mtEngine].label);
   if (missing.length) throw new Error(`Download first in Settings: ${missing.join(', ')}`);
+  const engine = ASR_ENGINES[settings.asrEngine];
+  if (engine.needsLanguage && settings.sourceLang === 'auto') throw new Error(`${engine.label} cannot detect the language. Choose the language of the audio in Settings.`);
+  if (engine.sourceCodes && settings.sourceLang !== 'auto' && !engine.sourceCodes.includes(settings.sourceLang)) {
+    throw new Error(`${engine.label} does not support this language. Choose another speech model in Settings.`);
+  }
 }
 
 async function start(): Promise<void> {
