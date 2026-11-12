@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { AutoModelForCausalLM, AutoTokenizer, env, pipeline } from '@huggingface/transformers';
+import { AutoModelForCausalLM, AutoTokenizer, Tensor, env, pipeline } from '@huggingface/transformers';
 import { ASR_ENGINES, MT_ENGINES, WHISPER_LANGUAGES, type AsrEngineId, type MtEngineId } from './engines';
 import type { FromWorker, ToWorker } from './protocol';
 import { loadQwen3 } from './qwen3-asr/load';
@@ -65,7 +65,28 @@ async function init(asr: AsrEngineId | null, mt: MtEngineId | null, modelHost: s
   post({ type: 'ready', loadMs: Math.round(performance.now() - started), device });
 }
 
+// Whisper token ids of the multilingual models: <|startoftranscript|> and the first and last language token.
+const WHISPER_SOT = 50258;
+const WHISPER_FIRST_LANGUAGE = 50259;
+const WHISPER_LAST_LANGUAGE = 50357;
+
+/** Transformers.js does not detect the language and falls back to English, so the first decoder step is run here. */
+async function detectWhisperLanguage(samples: Float32Array): Promise<string | null> {
+  const pipe = recognizer as unknown as {
+    processor: (audio: Float32Array) => Promise<Record<string, unknown>>;
+    tokenizer: { decode: (ids: number[], o: unknown) => string };
+    model: { generate: (o: unknown) => Promise<{ tolist: () => number[][] }> };
+  };
+  const inputs = await pipe.processor(samples);
+  const decoderInputIds = new Tensor('int64', BigInt64Array.from([BigInt(WHISPER_SOT)]), [1, 1]);
+  const out = await pipe.model.generate({ ...inputs, decoder_input_ids: decoderInputIds, max_new_tokens: 2 });
+  const token = Number((out.tolist()[0] ?? [])[1]);
+  if (!(token >= WHISPER_FIRST_LANGUAGE && token <= WHISPER_LAST_LANGUAGE)) return null;
+  return pipe.tokenizer.decode([token], { skip_special_tokens: false }).replace(/[<|>]/g, '') || null;
+}
+
 async function transcribe(samples: Float32Array, language: string): Promise<string> {
+  if (asrId === 'whisper-small' && language === 'auto') language = (await detectWhisperLanguage(samples)) ?? 'auto';
   if (asrId === 'qwen3-asr') {
     if (!qwen3) throw new Error('The speech model is not loaded');
     return (await transcribeQwen3(qwen3, samples, language === 'auto' ? null : language)).text;

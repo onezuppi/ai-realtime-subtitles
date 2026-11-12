@@ -40,10 +40,10 @@ export const ASR_ENGINES: Record<AsrEngineId, AsrEngine> = {
     repo: 'onnx-community/whisper-small',
     dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' },
     sizeMB: 560,
-    needsLanguage: true,
-    languages: '99 languages, the language must be chosen',
+    needsLanguage: false,
+    languages: '99 languages, detects the language by itself',
     available: true,
-    note: 'Smallest download. Works without WebGPU, but slowly. Without a chosen language it translates everything into English.',
+    note: 'Smallest download. Works without WebGPU, but slowly. Detecting the language costs one extra pass per phrase.',
   },
   cohere: {
     id: 'cohere',
