@@ -1,4 +1,6 @@
-import { loadSettings, type Message, type NativeReply, type NativeRequest, type Status } from '../messages';
+import { ASR_ENGINES, MT_ENGINES } from '../backends/browser/engines';
+import { isDownloaded } from '../backends/browser/models';
+import { loadSettings, type Message, type NativeReply, type NativeRequest, type Settings, type Status } from '../messages';
 
 const OFFSCREEN = 'src/offscreen/offscreen.html';
 let status: Status = { tabId: null, state: 'off' };
@@ -19,6 +21,17 @@ async function ensureOffscreen(): Promise<void> {
   });
 }
 
+/**
+ * Models are never downloaded behind the user's back: the user starts every download on the settings page.
+ * The check lives here because the offscreen document has no access to chrome.storage.
+ */
+async function requireDownloaded(settings: Settings): Promise<void> {
+  const missing: string[] = [];
+  if (!(await isDownloaded({ kind: 'asr', id: settings.asrEngine }))) missing.push(ASR_ENGINES[settings.asrEngine].label);
+  if (settings.mtEngine !== 'none' && !(await isDownloaded({ kind: 'mt', id: settings.mtEngine }))) missing.push(MT_ENGINES[settings.mtEngine].label);
+  if (missing.length) throw new Error(`Download first in Settings: ${missing.join(', ')}`);
+}
+
 async function start(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined) throw new Error('No active tab');
@@ -26,6 +39,7 @@ async function start(): Promise<void> {
   setStatus({ tabId: tab.id, state: 'loading' });
   const targetTabId = tab.id;
   const settings = await loadSettings();
+  if (settings.mode === 'browser') await requireDownloaded(settings);
   const streamId =
     settings.debugAudio === 'microphone'
       ? ''

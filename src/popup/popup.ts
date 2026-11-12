@@ -10,7 +10,7 @@ const modeBox = $<HTMLDivElement>('mode');
 const modeHint = $<HTMLParagraphElement>('mode-hint');
 
 const HINTS: Record<BackendKind, string> = {
-  browser: 'Models run inside the browser. Nothing to install, but slower.',
+  browser: 'Models run inside the browser. Nothing to install, but slower. Download the models first in Settings.',
   http: 'Fast. The companion program must be running on this computer.',
   native: 'For browsers that cannot reach this computer over HTTP, such as behind a VPN extension or in a Tor window. Install it with companion/install-bridge.',
 };
@@ -33,7 +33,8 @@ function render(status: Status) {
   toggle.classList.toggle('btn-stop', running);
   state.textContent = LABELS[status.state];
   state.dataset.state = status.state;
-  detail.textContent = status.state === 'error' ? (status.detail ?? 'Something went wrong') : '';
+  detail.textContent = status.state === 'error' ? (status.detail ?? 'Something went wrong') : status.state === 'loading' ? (status.detail ?? '') : '';
+  detail.dataset.kind = status.state === 'error' ? 'error' : 'info';
 }
 
 const send = (message: Message) => chrome.runtime.sendMessage(message);

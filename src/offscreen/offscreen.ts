@@ -11,8 +11,10 @@ let session: { context: AudioContext; media: MediaStream; backend: Backend; stre
 async function start(streamId: string, tabId: number, settings: Settings): Promise<void> {
   await stop();
   send({ type: 'status', tabId, state: 'loading' });
-  const backend = createBackend(settings.mode);
-  await backend.start();
+  const backend = createBackend(settings);
+  await backend.start(progress =>
+    send({ type: 'status', tabId, state: 'loading', detail: `Loading models: ${Math.round(progress.ratio * 100)}%` }),
+  );
 
   const fromTab = streamId !== '';
   const media = await navigator.mediaDevices.getUserMedia(

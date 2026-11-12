@@ -10,6 +10,7 @@
     "scripting",
     "tabCapture",
     "storage",
+    "unlimitedStorage",
     "nativeMessaging"
   ],
   "host_permissions": [

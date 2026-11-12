@@ -1,4 +1,5 @@
 import type { BackendKind } from './core/backend';
+import type { AsrEngineId, MtEngineId } from './backends/browser/engines';
 
 export interface Settings {
   mode: BackendKind;
@@ -10,9 +11,26 @@ export interface Settings {
   fontScale: number;
   /** Development only: listen to the default microphone instead of the tab (used with a fake audio device in tests). */
   debugAudio?: 'microphone';
+  /** Browser mode: speech model. */
+  asrEngine: AsrEngineId;
+  /** Browser mode: translation model. */
+  mtEngine: MtEngineId;
+  /** Browser mode: language of the audio, or "auto". Some models cannot detect it. */
+  sourceLang: string;
+  /** Browser mode: where models are downloaded from. A mirror can replace Hugging Face. */
+  modelHost: string;
 }
 
-export const DEFAULT_SETTINGS: Settings = { mode: 'http', targetLang: 'en', opacity: 0.55, fontScale: 1 };
+export const DEFAULT_SETTINGS: Settings = {
+  mode: 'http',
+  targetLang: 'en',
+  opacity: 0.55,
+  fontScale: 1,
+  asrEngine: 'whisper-small',
+  mtEngine: 'plamo-0.8b',
+  sourceLang: 'auto',
+  modelHost: 'https://huggingface.co',
+};
 
 export async function loadSettings(): Promise<Settings> {
   const stored = await chrome.storage.local.get('settings');

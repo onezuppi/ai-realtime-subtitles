@@ -4,6 +4,7 @@ import { defineConfig } from 'vite';
 // Pages, service worker and audio worklet. The content script is built separately (vite.content.config.ts)
 // because it must be a single classic script.
 export default defineConfig({
+  worker: { format: 'es' },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
