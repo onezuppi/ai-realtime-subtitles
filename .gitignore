@@ -4,3 +4,5 @@ dist/
 .env
 models/
 .e2e/
+__pycache__/
+*.pyc
