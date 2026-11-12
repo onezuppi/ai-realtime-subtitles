@@ -16,6 +16,36 @@ BROWSERS = {
 }
 
 
+def detect_browsers() -> list[str]:
+    """Browsers that look installed: their per-user or machine-wide registry key exists."""
+    import winreg
+
+    found = []
+    for name, native_key in BROWSERS.items():
+        vendor_key = native_key.rsplit("\\NativeMessagingHosts", 1)[0]
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                winreg.CloseKey(winreg.OpenKey(hive, vendor_key))
+                found.append(name)
+                break
+            except OSError:
+                continue
+    return found
+
+
+def registered_browsers() -> list[str]:
+    import winreg
+
+    result = []
+    for name, path in BROWSERS.items():
+        try:
+            winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf"{path}\{HOST_NAME}"))
+            result.append(name)
+        except OSError:
+            continue
+    return result
+
+
 def write_launcher() -> Path:
     """A .bat file: the browser starts hosts as executables, not as `python -m`."""
     launcher = app_dir() / "host.bat"

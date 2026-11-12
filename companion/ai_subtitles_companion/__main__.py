@@ -18,6 +18,22 @@ from . import bridge, config as cfg, install as installer, servers
 DEFAULT_EXTENSION_ID = "fdpmchjhigcggmmcilchcakdnocflcbf"
 
 
+INSTALL_NOTE = """\
+Bridge installation
+
+Why: some browsers cannot reach programs on this computer over HTTP (127.0.0.1). This happens with
+browser extensions that route all traffic through a VPN or proxy, with Tor windows, and with strict
+network policies. The bridge uses Native Messaging instead: the browser starts this program directly
+and talks to it through a pipe, so no network is involved.
+
+What this does: writes one registry key per browser under HKEY_CURRENT_USER (no admin rights) that
+points to a small manifest file in %LOCALAPPDATA%\\ai-realtime-subtitles. Only the extension with
+ID(s) {ids} may use it.
+Browsers: {browsers}
+Undo: python -m ai_subtitles_companion uninstall
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ai_subtitles_companion")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -27,7 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status")
     install_cmd = sub.add_parser("install")
     install_cmd.add_argument("--extension-id", action="append", default=[], help="extension ID (repeatable)")
-    install_cmd.add_argument("--browser", action="append", choices=list(installer.BROWSERS), help="default: all")
+    install_cmd.add_argument("--browser", action="append", choices=list(installer.BROWSERS), help="default: every installed one")
+    install_cmd.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+    sub.add_parser("check")
     sub.add_parser("uninstall")
     config_cmd = sub.add_parser("config")
     config_cmd.add_argument("--models-dir")
@@ -54,8 +72,20 @@ def main(argv: list[str] | None = None) -> int:
             print({"asr": servers.is_ready(config.asr_port), "translate": servers.is_ready(config.mt_port)})
         elif args.command == "install":
             ids = args.extension_id or [DEFAULT_EXTENSION_ID]
-            done = installer.install(ids, args.browser or list(installer.BROWSERS))
+            browsers = args.browser or installer.detect_browsers()
+            if not browsers:
+                print("error: no Chrome, Brave or Edge found. Use --browser to choose one.", file=sys.stderr)
+                return 1
+            print(INSTALL_NOTE.format(browsers=", ".join(browsers), ids=", ".join(ids)))
+            if not args.yes and input("Continue? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("cancelled")
+                return 1
+            done = installer.install(ids, browsers)
             print("registered for:", ", ".join(done))
+            print("Restart the browser, then pick 'Program via bridge' in the extension popup.")
+        elif args.command == "check":
+            print("registered for:", ", ".join(installer.registered_browsers()) or "no browser")
+            print("servers:", {"asr": servers.is_ready(config.asr_port), "translate": servers.is_ready(config.mt_port)})
         elif args.command == "uninstall":
             print("removed for:", ", ".join(installer.uninstall()) or "nothing")
         elif args.command == "config":
