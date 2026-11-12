@@ -54,7 +54,7 @@ export async function loadQwen3(repo: string, host: string, wasmBase: string, gp
 
   // One file at a time keeps the peak memory low: each buffer is copied into the session and then dropped.
   const encoder = await ort.InferenceSession.create(await fetchFile(FILES.encoder), accelerated);
-  // The embedding table is only a lookup, so it stays off the video memory.
+  // The embedding table is only a lookup: on the GPU it was slower than on WASM in the benchmark.
   const embed = await ort.InferenceSession.create(await fetchFile(FILES.embed), { executionProviders: ['wasm'] });
   const decoderData = await fetchFile(FILES.decoderData);
   // The key-value cache stays in video memory between steps. Copying it to the CPU and back every token is what made decoding slow.

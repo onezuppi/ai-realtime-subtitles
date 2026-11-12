@@ -71,7 +71,9 @@ async function transcribe(samples: Float32Array, language: string): Promise<stri
     return (await transcribeQwen3(qwen3, samples, language === 'auto' ? null : language)).text;
   }
   if (!recognizer) throw new Error('The speech model is not loaded');
-  const options: Record<string, unknown> = { max_new_tokens: 200 };
+  // Speech has a limited number of tokens per second. The cap and the repeat block stop Whisper from looping on noise and on Chinese.
+  const options: Record<string, unknown> = { max_new_tokens: Math.min(200, 20 + Math.ceil((samples.length / 16000) * 12)) };
+  if (asrId === 'whisper-small') options.no_repeat_ngram_size = 4;
   if (language !== 'auto') options.language = asrId === 'whisper-small' ? (WHISPER_LANGUAGES[language] ?? language) : language;
   if (asrId === 'whisper-small') options.task = 'transcribe';
   const result = await recognizer(samples, options);
