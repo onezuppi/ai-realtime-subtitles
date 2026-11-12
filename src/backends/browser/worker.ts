@@ -2,6 +2,8 @@
 import { AutoModelForCausalLM, AutoTokenizer, env, pipeline } from '@huggingface/transformers';
 import { ASR_ENGINES, MT_ENGINES, WHISPER_LANGUAGES, type AsrEngineId, type MtEngineId } from './engines';
 import type { FromWorker, ToWorker } from './protocol';
+import { loadQwen3 } from './qwen3-asr/load';
+import { transcribeQwen3, type Qwen3Parts } from './qwen3-asr/runner';
 
 const post = (message: FromWorker) => self.postMessage(message);
 
@@ -22,6 +24,7 @@ function reportProgress(event: { status?: string; file?: string; loaded?: number
 type Recognizer = (audio: Float32Array, options: Record<string, unknown>) => Promise<{ text?: string } | { text?: string }[]>;
 let recognizer: Recognizer | null = null;
 let asrId: AsrEngineId = 'whisper-small';
+let qwen3: Qwen3Parts | null = null;
 let translator: { tokenizer: Awaited<ReturnType<typeof AutoTokenizer.from_pretrained>>; model: Awaited<ReturnType<typeof AutoModelForCausalLM.from_pretrained>> } | null = null;
 let chain: Promise<void> = Promise.resolve();
 
@@ -41,7 +44,11 @@ async function init(asr: AsrEngineId | null, mt: MtEngineId | null, modelHost: s
     const engine = ASR_ENGINES[asr];
     if (!engine.available) throw new Error(`${engine.label} is not available in the browser yet`);
     asrId = asr;
-    recognizer = (await pipeline('automatic-speech-recognition', engine.repo, {
+    if (asr === 'qwen3-asr') {
+      qwen3 = await loadQwen3(engine.repo, modelHost, wasmBase, device === 'webgpu', (file, loaded, total) =>
+        reportProgress({ status: 'progress', file, loaded, total }),
+      );
+    } else recognizer = (await pipeline('automatic-speech-recognition', engine.repo, {
       // The Whisper encoder in fp32 is the only part that has no smaller file; Cohere runs in q4f16 on WebGPU only.
       dtype: engine.dtype as never,
       device,
@@ -59,6 +66,10 @@ async function init(asr: AsrEngineId | null, mt: MtEngineId | null, modelHost: s
 }
 
 async function transcribe(samples: Float32Array, language: string): Promise<string> {
+  if (asrId === 'qwen3-asr') {
+    if (!qwen3) throw new Error('The speech model is not loaded');
+    return (await transcribeQwen3(qwen3, samples, language === 'auto' ? null : language)).text;
+  }
   if (!recognizer) throw new Error('The speech model is not loaded');
   const options: Record<string, unknown> = { max_new_tokens: 200 };
   if (language !== 'auto') options.language = asrId === 'whisper-small' ? (WHISPER_LANGUAGES[language] ?? language) : language;

@@ -62,11 +62,11 @@ export const ASR_ENGINES: Record<AsrEngineId, AsrEngine> = {
     label: 'Qwen3-ASR 0.6B',
     repo: 'ae9is/qwen3-asr-0.6b-onnx',
     dtype: 'q4',
-    sizeMB: 1630,
+    sizeMB: 1720,
     needsLanguage: false,
     languages: '30 languages, detects the language by itself',
-    available: false,
-    note: 'The published Transformers.js has no runner for this model. It works in the Computer and Bridge modes.',
+    available: true,
+    note: 'Needs WebGPU. Runs on our own runner, because Transformers.js cannot run this model.',
   },
 };
 
