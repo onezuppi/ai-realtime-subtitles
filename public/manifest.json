@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "AI Realtime Subtitles",
+  "version": "0.1.0",
+  "description": "Real-time subtitles and translation of tab audio with local models.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "offscreen", "scripting", "tabCapture", "storage"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": { "service_worker": "service-worker.js", "type": "module" },
+  "action": { "default_popup": "src/popup/popup.html" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
