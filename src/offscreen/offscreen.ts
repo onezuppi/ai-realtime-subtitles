@@ -14,16 +14,19 @@ async function start(streamId: string, tabId: number, settings: Settings): Promi
   const backend = createBackend(settings.mode);
   await backend.start();
 
-  const media = await navigator.mediaDevices.getUserMedia({
-    audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
-  } as MediaStreamConstraints);
+  const fromTab = streamId !== '';
+  const media = await navigator.mediaDevices.getUserMedia(
+    fromTab
+      ? ({ audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } } } as MediaStreamConstraints)
+      : { audio: true },
+  );
   const context = new AudioContext({ sampleRate: SAMPLE_RATE });
   await context.audioWorklet.addModule(chrome.runtime.getURL('capture-worklet.js'));
   const source = context.createMediaStreamSource(media);
   const node = new AudioWorkletNode(context, 'capture', { numberOfInputs: 1, numberOfOutputs: 0 });
   source.connect(node);
   // Capturing a tab mutes it, so play the sound back.
-  source.connect(context.destination);
+  if (fromTab) source.connect(context.destination);
 
   const stream = new SubtitleStream({
     transcribe: async samples => (await backend.transcribe(samples, SAMPLE_RATE)).text,

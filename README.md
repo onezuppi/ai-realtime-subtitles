@@ -31,6 +31,34 @@
 - сегменты с речью короче 300 мс отбрасываются;
 - в очереди перевода не больше 3 сегментов, старые отбрасываются.
 
+## Программа на компьютере (Python, `companion/`)
+
+Только стандартная библиотека Python. Запуск из папки `companion`:
+
+```powershell
+python -m ai_subtitles_companion config --models-dir C:\путь\к\моделям   # один раз
+python -m ai_subtitles_companion serve        # запустить llama-server для ASR (:8083) и перевода (:8082)
+python -m ai_subtitles_companion status
+python -m ai_subtitles_companion stop
+```
+
+Файлы моделей: `Qwen3-ASR-0.6B-Q8_0.gguf`, `mmproj-Qwen3-ASR-0.6B-Q8_0.gguf`, `plamo-3-translate-2b-Q4_K_M.gguf` (имена меняются в `config.json`). `llama-server` ищется в `llama_server` из настроек, в переменной `LLAMA_SERVER`, в `PATH`, затем среди сборок LM Studio (Vulkan).
+
+**Режим "HTTP".** Расширение ходит на `127.0.0.1:8083` и `:8082`. Серверы должны быть запущены (`serve`).
+
+**Режим "через мост".** Расширение говорит с программой через Native Messaging, сетевые запросы не нужны, поэтому работает и в окнах Tor. Программа сама запускает серверы при первом обращении. Мост принимает только фиксированные цели (`asr`, `translate`, `companion`) и пути, произвольные адреса запрещены. Регистрация моста (запись в реестр текущего пользователя):
+
+```powershell
+python -m ai_subtitles_companion install      # Chrome, Brave и Edge; ключ --browser brave для одного
+python -m ai_subtitles_companion uninstall
+```
+
+Идентификатор расширения закреплён ключом в `public/manifest.json`: `fdpmchjhigcggmmcilchcakdnocflcbf`.
+
+## Проверка в отдельном браузере
+
+`.e2e/drive.mjs` (в git не входит) запускает отдельный экземпляр Brave с временным профилем, загружает `dist`, подставляет вместо звука вкладки тестовый файл как микрофон и проверяет статусы, текст субтитров, перетаскивание и изменение размера. `tabCapture` в этом тесте не проверяется: он требует клика по значку расширения.
+
 ## Разработка
 
 ```powershell

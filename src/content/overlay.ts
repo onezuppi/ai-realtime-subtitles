@@ -73,14 +73,20 @@ function createOverlay(initial: Box) {
   addEventListener('resize', apply);
   apply();
 
+  // The caption fades after a few seconds, but stays while the pointer is on it, so it can be moved and resized.
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleHide = () => {
+    clearTimeout(timer);
+    if (text.textContent) timer = setTimeout(() => (box.style.display = 'none'), HIDE_MS(text.textContent));
+  };
+  box.addEventListener('pointerenter', () => clearTimeout(timer));
+  box.addEventListener('pointerleave', scheduleHide);
   return {
     show(value: string) {
-      clearTimeout(timer);
       text.textContent = value;
       box.style.display = value ? 'block' : 'none';
       apply();
-      if (value) timer = setTimeout(() => (box.style.display = 'none'), HIDE_MS(value));
+      scheduleHide();
     },
   };
 }

@@ -1,4 +1,4 @@
-import { loadSettings, type Message, type Status } from '../messages';
+import { loadSettings, type Message, type NativeReply, type NativeRequest, type Status } from '../messages';
 
 const OFFSCREEN = 'src/offscreen/offscreen.html';
 let status: Status = { tabId: null, state: 'off' };
@@ -25,14 +25,17 @@ async function start(): Promise<void> {
   await stop();
   setStatus({ tabId: tab.id, state: 'loading' });
   const targetTabId = tab.id;
-  const streamId = await new Promise<string>((resolve, reject) =>
-    chrome.tabCapture.getMediaStreamId({ targetTabId }, id =>
-      chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(id),
-    ),
-  );
+  const settings = await loadSettings();
+  const streamId =
+    settings.debugAudio === 'microphone'
+      ? ''
+      : await new Promise<string>((resolve, reject) =>
+          chrome.tabCapture.getMediaStreamId({ targetTabId }, id =>
+            chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(id),
+          ),
+        );
   await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
   await ensureOffscreen();
-  const settings = await loadSettings();
   await chrome.runtime.sendMessage({ type: 'offscreen-start', streamId, tabId: tab.id, settings } satisfies Message);
 }
 
@@ -43,8 +46,45 @@ async function stop(): Promise<void> {
   if (tabId !== null) await chrome.tabs.sendMessage(tabId, { type: 'caption', tabId, text: '' }).catch(() => {});
 }
 
+// Native messaging: one port to the companion program, requests matched to replies by id.
+const NATIVE_HOST = 'com.ai_realtime_subtitles.companion';
+let nativePort: chrome.runtime.Port | null = null;
+let nextRequestId = 1;
+const waiting = new Map<number, (reply: NativeReply) => void>();
+
+function openNativePort(): chrome.runtime.Port {
+  if (nativePort) return nativePort;
+  const port = chrome.runtime.connectNative(NATIVE_HOST);
+  port.onMessage.addListener((reply: NativeReply & { id: number }) => {
+    waiting.get(reply.id)?.(reply);
+    waiting.delete(reply.id);
+  });
+  port.onDisconnect.addListener(() => {
+    const error = chrome.runtime.lastError?.message ?? 'The companion program closed the connection';
+    for (const resolve of waiting.values()) resolve({ ok: false, error });
+    waiting.clear();
+    nativePort = null;
+  });
+  return (nativePort = port);
+}
+
+const callNative = (request: NativeRequest) =>
+  new Promise<NativeReply>(resolve => {
+    const id = nextRequestId++;
+    waiting.set(id, resolve);
+    try {
+      openNativePort().postMessage({ id, ...request });
+    } catch (error) {
+      waiting.delete(id);
+      resolve({ ok: false, error: String(error) });
+    }
+  });
+
 chrome.runtime.onMessage.addListener((message: Message, _sender, respond) => {
   switch (message.type) {
+    case 'native-request':
+      callNative(message.request).then(respond);
+      return true; // answer asynchronously
     case 'popup-start':
       start().catch(error => setStatus({ tabId: status.tabId, state: 'error', detail: String(error) }));
       break;

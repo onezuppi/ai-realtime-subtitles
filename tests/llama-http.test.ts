@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LlamaBackend, parseAsr } from '../src/backends/llama-http';
+import { LlamaBackend, parseAsr, type Transport } from '../src/backends/llama-http';
 import { encodeWav } from '../src/backends/wav';
 
 const reply = (text: string) => ({ choices: [{ message: { content: text } }] });
+const transport = (post: (url: string, body: any) => Promise<unknown>): Transport => ({ post: (base, path, body) => post(base + path, body), ready: async () => {} });
 
 describe('parseAsr', () => {
   it('splits language and text', () => {
@@ -28,7 +29,7 @@ describe('encodeWav', () => {
 describe('LlamaBackend', () => {
   it('sends audio as input_audio and parses the answer', async () => {
     const calls: { url: string; body: any }[] = [];
-    const backend = new LlamaBackend('http', undefined, async (url, body) => (calls.push({ url, body }), reply('language Spanish<asr_text>hola')));
+    const backend = new LlamaBackend('http', undefined, transport(async (url, body) => (calls.push({ url, body }), reply('language Spanish<asr_text>hola'))));
     const result = await backend.transcribe(new Float32Array(160), 16000);
     expect(result).toEqual({ language: 'spanish', text: 'hola' });
     expect(calls[0]!.url).toBe('http://127.0.0.1:8083/v1/chat/completions');
@@ -37,7 +38,7 @@ describe('LlamaBackend', () => {
 
   it('translates with history and the target language, then caches by language and text', async () => {
     const calls: any[] = [];
-    const backend = new LlamaBackend('http', undefined, async (_url, body) => (calls.push(body), reply(' hello ')));
+    const backend = new LlamaBackend('http', undefined, transport(async (_url, body) => (calls.push(body), reply(' hello '))));
     const history = [{ source: 'a', target: 'b' }];
     expect(await backend.translate('hola', 'es', 'en', history)).toBe('hello');
     expect(calls[0].chat_template_kwargs).toEqual({ target_lang: 'en' });
@@ -54,8 +55,9 @@ describe('LlamaBackend', () => {
 
   it('does not cache an empty translation', async () => {
     let n = 0;
-    const backend = new LlamaBackend('native', undefined, async () => reply(++n === 1 ? '' : 'ok'));
+    const backend = new LlamaBackend('native', undefined, transport(async () => reply(++n === 1 ? '' : 'ok')));
     expect(await backend.translate('x', 'es', 'en', [])).toBe('');
     expect(await backend.translate('x', 'es', 'en', [])).toBe('ok');
   });
 });
+

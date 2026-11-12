@@ -4,11 +4,27 @@
   "version": "0.1.0",
   "description": "Real-time subtitles and translation of tab audio with local models.",
   "minimum_chrome_version": "116",
-  "permissions": ["activeTab", "offscreen", "scripting", "tabCapture", "storage"],
-  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
-  "background": { "service_worker": "service-worker.js", "type": "module" },
-  "action": { "default_popup": "src/popup/popup.html" },
+  "permissions": [
+    "activeTab",
+    "offscreen",
+    "scripting",
+    "tabCapture",
+    "storage",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html"
+  },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8Ntbhr90CRNXwdYxaafsc//IkpqR7cp9mv9eNAH0oPUB4pPSePweb0iy503dyEoDiB0otr4c9yucIA058NkPdm0jNZQIjEvwp3NqhG1pNz75eaVP2fsjnSGCRtWgS9B0MVPvotww5qGiN9JX2POGto2RQbl76wLxtq0xXbcw1T2yn68OQe+jGy7YLrLHLKXwZvyXWmPp1MrWJWPnsL2lmIef72KGsMbNZ6TzU+tcc+XzcV2+uYivoclOFLTBOQOR++dbnRw0barkhIrde9CKpx129EZBFqb2mkL3k5bDEOir9oZlhNRFtwsw3fUVnH4Eg1JrhytZ3iphZ3YoKdyLyQIDAQAB"
 }

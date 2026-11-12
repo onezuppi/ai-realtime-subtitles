@@ -4,6 +4,8 @@ export interface Settings {
   mode: BackendKind;
   /** Target language of the captions, for example "en" or "ru". */
   targetLang: string;
+  /** Development only: listen to the default microphone instead of the tab (used with a fake audio device in tests). */
+  debugAudio?: 'microphone';
 }
 
 export const DEFAULT_SETTINGS: Settings = { mode: 'http', targetLang: 'en' };
@@ -15,7 +17,23 @@ export async function loadSettings(): Promise<Settings> {
 
 export const saveSettings = (settings: Settings) => chrome.storage.local.set({ settings });
 
+/** A request for the companion program (see companion/ai_subtitles_companion/bridge.py). */
+export interface NativeRequest {
+  target: 'asr' | 'translate' | 'companion';
+  path: string;
+  method: 'GET' | 'POST';
+  body?: unknown;
+}
+
+export interface NativeReply {
+  ok: boolean;
+  status?: number;
+  data?: unknown;
+  error?: string;
+}
+
 export type Message =
+  | { type: 'native-request'; request: NativeRequest }
   | { type: 'popup-start' }
   | { type: 'popup-stop' }
   | { type: 'popup-status' }
