@@ -7,13 +7,8 @@ export interface Box {
   width: number;
 }
 
-/** Storage key of the saved box. */
-export const OVERLAY_BOX_KEY = 'overlayBox';
-
 export const MIN_WIDTH = 160;
-export const FONT_PER_WIDTH = 1 / 28;
-
-export const DEFAULT_OPACITY = 0.55;
+const FONT_PER_WIDTH = 1 / 28;
 
 /** Default box: centred, near the bottom, 60% of the viewport width. */
 export function defaultBox(viewportWidth: number, viewportHeight: number): Box {
@@ -32,3 +27,6 @@ export function clampBox(box: Box, viewportWidth: number, viewportHeight: number
 }
 
 export const fontSizeFor = (width: number) => Math.max(12, Math.round(width * FONT_PER_WIDTH));
+
+/** How long a caption stays on screen: longer text stays longer, between 3 and 8 seconds. */
+export const hideDelayMs = (text: string) => Math.min(8000, Math.max(3000, text.length * 80));

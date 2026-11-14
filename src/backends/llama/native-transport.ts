@@ -1,5 +1,6 @@
-import type { NativeReply, NativeRequest } from '../messages';
-import type { LlamaEndpoints, Transport } from './llama-http';
+import type { NativeReply, NativeRequest } from '../../shared/native-protocol';
+import type { LlamaEndpoints } from './llama-backend';
+import type { Transport } from './transport';
 
 /** Endpoints for the bridge: the host maps these fixed names to its own local servers. */
 export const NATIVE_ENDPOINTS: LlamaEndpoints = { asr: 'native://asr', translate: 'native://translate' };

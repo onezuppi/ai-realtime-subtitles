@@ -1,8 +1,8 @@
 import { AutoTokenizer } from '@huggingface/transformers';
 import * as ort from 'onnxruntime-web/webgpu';
+import { MODEL_CACHE_NAME as CACHE_NAME } from '../../../shared/storage-keys';
 import type { Qwen3Parts, TokenizerLike } from './runner';
 
-const CACHE_NAME = 'transformers-cache';
 const FILES = {
   encoder: 'onnx/audio_encoder_q4.onnx',
   embed: 'onnx/embed_tokens_q4.onnx',

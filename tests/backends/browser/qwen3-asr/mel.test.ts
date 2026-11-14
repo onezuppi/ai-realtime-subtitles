@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioTokenCount, logMel, melFilterBank, N_MELS } from '../src/backends/browser/qwen3-asr/mel';
-import { parseOutput } from '../src/backends/browser/qwen3-asr/runner';
+import { audioTokenCount, logMel, melFilterBank, N_MELS } from '../../../../src/backends/browser/qwen3-asr/mel';
 
 describe('Qwen3-ASR features', () => {
   it('counts audio tokens like the model does', () => {
@@ -23,19 +22,5 @@ describe('Qwen3-ASR features', () => {
     const max = Math.max(...data);
     const min = Math.min(...data);
     expect(max - min).toBeLessThanOrEqual(2 + 1e-6); // log range of 8 divided by 4
-  });
-});
-
-describe('parseOutput', () => {
-  it('splits the language and the text', () => {
-    expect(parseOutput('language English<asr_text>Hello there.<|im_end|>', null)).toEqual({ language: 'English', text: 'Hello there.' });
-  });
-
-  it('returns only the text when the language was forced', () => {
-    expect(parseOutput('Hello there.', 'English')).toEqual({ language: '', text: 'Hello there.' });
-  });
-
-  it('treats "language None" as no language', () => {
-    expect(parseOutput('language None<asr_text>', null)).toEqual({ language: '', text: '' });
   });
 });

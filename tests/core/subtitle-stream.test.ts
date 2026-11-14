@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SubtitleStream, type Caption, type SubtitleStreamHandlers } from '../src/core/subtitle-stream';
+import { SubtitleStream, type Caption, type SubtitleStreamHandlers } from '../../src/core/subtitle-stream';
 
 const RATE = 1000; // 1 sample = 1 ms
 const block = (value: number, ms = 250) => new Float32Array(ms).fill(value);

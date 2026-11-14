@@ -4,7 +4,7 @@ declare abstract class AudioWorkletProcessor {
 }
 declare function registerProcessor(name: string, processor: new () => AudioWorkletProcessor): void;
 
-const BLOCK = 4000; // 250 ms at 16 kHz
+const BLOCK = 4000; // CAPTURE_BLOCK_SAMPLES in core/audio.ts: 250 ms at 16 kHz (a worklet is bundled alone, so it keeps its own copy)
 
 class CaptureProcessor extends AudioWorkletProcessor {
   private block = new Float32Array(BLOCK);

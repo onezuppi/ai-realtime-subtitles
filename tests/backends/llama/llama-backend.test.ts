@@ -1,30 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LlamaBackend, parseAsr, type Transport } from '../src/backends/llama-http';
-import { encodeWav } from '../src/backends/wav';
+import { LlamaBackend } from '../../../src/backends/llama/llama-backend';
+import type { Transport } from '../../../src/backends/llama/transport';
 
 const reply = (text: string) => ({ choices: [{ message: { content: text } }] });
 const transport = (post: (url: string, body: any) => Promise<unknown>): Transport => ({ post: (base, path, body) => post(base + path, body), ready: async () => {} });
-
-describe('parseAsr', () => {
-  it('splits language and text', () => {
-    expect(parseAsr('language Chinese<asr_text> 你好 ')).toEqual({ language: 'chinese', text: '你好' });
-  });
-  it('keeps plain text without the tag', () => {
-    expect(parseAsr(' hello ')).toEqual({ language: '', text: 'hello' });
-  });
-});
-
-describe('encodeWav', () => {
-  it('writes a valid 16-bit mono header', () => {
-    const wav = encodeWav(new Float32Array([0, 1, -1]), 16000);
-    const view = new DataView(wav.buffer);
-    expect(String.fromCharCode(...wav.subarray(0, 4))).toBe('RIFF');
-    expect(view.getUint32(24, true)).toBe(16000);
-    expect(view.getUint32(40, true)).toBe(6);
-    expect(view.getInt16(46, true)).toBe(32767);
-    expect(view.getInt16(48, true)).toBe(-32768);
-  });
-});
 
 describe('LlamaBackend', () => {
   it('sends audio as input_audio and parses the answer', async () => {

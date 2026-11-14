@@ -71,3 +71,6 @@ button { font: inherit; cursor: pointer; border-radius: var(--radius-sm); }
 .pill[data-state="error"] { color: var(--danger); }
 
 input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+/* An element with `hidden` stays hidden even when a class gives it display: grid or flex. */
+[hidden] { display: none !important; }

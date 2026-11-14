@@ -32,6 +32,7 @@
       .model-status { font-size: 12px; min-height: 1.2em; }
       .model-status[data-kind="error"] { color: var(--danger); }
       .model-status[data-kind="ok"] { color: var(--ok); }
+      #source-hint[data-required="true"] { color: var(--warn); font-weight: 600; }
       .warn { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12px; margin: 8px 0; }
       .advanced { margin-top: 14px; }
       .advanced summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
@@ -61,11 +62,16 @@
       <section class="card">
         <h2>Translation</h2>
         <div class="row">
+          <span class="label" id="translate-label">What to show</span>
+          <div class="segmented" id="translate-mode" role="radiogroup" aria-labelledby="translate-label">
+            <button role="radio" data-value="off">Subtitles</button>
+            <button role="radio" data-value="on">Subtitles + translation</button>
+          </div>
+        </div>
+        <div class="row" id="target-row">
           <label class="label" for="lang">Translate to</label>
-          <select id="lang">
-            <option value="en">English</option>
-            <option value="ru">Russian</option>
-          </select>
+          <select id="lang"></select>
+          <p class="hint">52 languages. The translation model has to be downloaded for the Browser mode.</p>
         </div>
       </section>
 
@@ -79,7 +85,7 @@
         <h3>Speech recognition</h3>
         <div id="asr-models" class="models"></div>
         <div class="row" id="source-row">
-          <label class="label" for="sourceLang">Language of the audio</label>
+          <label class="label" id="source-label" for="sourceLang">Language of the audio</label>
           <select id="sourceLang"></select>
           <p class="hint" id="source-hint"></p>
         </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampBox, defaultBox, fontSizeFor, MIN_WIDTH } from '../src/content/geometry';
+import { clampBox, defaultBox, fontSizeFor, MIN_WIDTH } from '../../src/content/geometry';
 
 describe('overlay geometry', () => {
   it('centres the default box near the bottom', () => {

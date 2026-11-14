@@ -1,9 +1,11 @@
 /**
  * Log-mel features the way Qwen3-ASR expects them: the Whisper recipe with 128 mel bins, no padding to 30 s.
- * Checked against the WhisperFeatureExtractor of Transformers.js (see .e2e/qwen3-parity.mjs).
+ * Checked against the WhisperFeatureExtractor of Transformers.js (see e2e/qwen3-parity.mjs).
  */
 
-export const SAMPLE_RATE = 16000;
+import { AUDIO_SAMPLE_RATE } from '../../../core/audio';
+
+export const SAMPLE_RATE = AUDIO_SAMPLE_RATE;
 export const N_FFT = 400;
 export const HOP = 160;
 export const N_MELS = 128;

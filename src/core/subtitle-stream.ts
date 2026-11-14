@@ -1,3 +1,4 @@
+import { AUDIO_SAMPLE_RATE } from './audio';
 import type { HistoryItem } from './backend';
 
 /** Segmentation values tuned on real zh/ja/es/de clips. */
@@ -21,7 +22,7 @@ export interface SegmentationOptions {
 }
 
 export const TUNED: SegmentationOptions = {
-  sampleRate: 16000,
+  sampleRate: AUDIO_SAMPLE_RATE,
   silenceMs: 400,
   maxMs: 6000,
   softMs: 3000,
@@ -67,7 +68,6 @@ export class SubtitleStream {
   private preroll: Float32Array | null = null;
   private history: HistoryItem[] = [];
   private noiseFloor = 0;
-  dropped = 0;
 
   constructor(handlers: SubtitleStreamHandlers, options: Partial<SegmentationOptions> = {}) {
     this.options = { ...TUNED, ...options };
@@ -140,7 +140,6 @@ export class SubtitleStream {
     this.jobs.push({ samples, generation: this.generation });
     while (this.options.maxPending > 0 && this.jobs.length > this.options.maxPending) {
       this.jobs.shift();
-      this.dropped++;
       this.handlers.onDrop();
     }
     this.kick();

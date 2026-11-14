@@ -2,7 +2,7 @@
 import { createBackend } from '../backends/create';
 import { BrowserBackend } from '../backends/browser/browser-backend';
 import { ASR_ENGINES, type AsrEngineId, type MtEngineId } from '../backends/browser/engines';
-import { DEFAULT_SETTINGS } from '../messages';
+import { DEFAULT_SETTINGS } from '../shared/settings';
 
 // The config comes as one base64url JSON value, because the DevTools endpoint that opens the page cuts URLs at "&".
 const config = JSON.parse(atob(new URLSearchParams(location.search).get('c')!.replace(/-/g, '+').replace(/_/g, '/')));

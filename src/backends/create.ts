@@ -1,9 +1,9 @@
 import type { Backend } from '../core/backend';
-import type { Settings } from '../messages';
+import { effectiveMtEngine, type Settings } from '../shared/settings';
 import { BrowserBackend } from './browser/browser-backend';
-import { createModelWorker, wasmBaseUrl } from './browser/models';
-import { LlamaBackend } from './llama-http';
-import { NATIVE_ENDPOINTS, nativeTransport, sendViaServiceWorker } from './native';
+import { createModelWorker, wasmBaseUrl } from './browser/models/worker-factory';
+import { LlamaBackend } from './llama/llama-backend';
+import { NATIVE_ENDPOINTS, nativeTransport, sendViaServiceWorker } from './llama/native-transport';
 
 export function createBackend(settings: Settings): Backend {
   switch (settings.mode) {
@@ -14,7 +14,7 @@ export function createBackend(settings: Settings): Backend {
     case 'browser':
       return new BrowserBackend({
         asr: settings.asrEngine,
-        mt: settings.mtEngine,
+        mt: effectiveMtEngine(settings),
         sourceLang: settings.sourceLang,
         modelHost: settings.modelHost,
         wasmBase: wasmBaseUrl(),

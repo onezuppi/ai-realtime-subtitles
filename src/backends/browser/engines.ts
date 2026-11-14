@@ -1,4 +1,4 @@
-/** Models that can run inside the browser. One list feeds the worker, the settings page and the README table. */
+/** Models that can run inside the browser. One list feeds the worker and the settings page. */
 
 export type AsrEngineId = 'whisper-small' | 'cohere' | 'qwen3-asr';
 export type MtEngineId = 'plamo-0.8b' | 'none';
@@ -17,8 +17,8 @@ export interface AsrEngine {
   languages: string;
   /** Language codes the model can recognise. Missing means "many, detected by itself". */
   sourceCodes?: string[];
-  /** False while the engine has no runner. */
-  available: boolean;
+  /** The model runs on WebGPU only. */
+  needsWebGpu: boolean;
   note: string;
 }
 
@@ -29,7 +29,8 @@ export interface MtEngine {
   dtype: string;
   sizeMB: number;
   languages: string;
-  available: boolean;
+  /** The model runs on WebGPU only. */
+  needsWebGpu: boolean;
   note: string;
 }
 
@@ -42,7 +43,7 @@ export const ASR_ENGINES: Record<AsrEngineId, AsrEngine> = {
     sizeMB: 560,
     needsLanguage: false,
     languages: '99 languages, detects the language by itself',
-    available: true,
+    needsWebGpu: false,
     note: 'Smallest download. Works without WebGPU, but slowly. Detecting the language costs one extra pass per phrase.',
   },
   cohere: {
@@ -54,7 +55,7 @@ export const ASR_ENGINES: Record<AsrEngineId, AsrEngine> = {
     needsLanguage: true,
     languages: '14 languages (no Russian), the language must be chosen',
     sourceCodes: ['ar', 'de', 'el', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'vi', 'zh'],
-    available: true,
+    needsWebGpu: true,
     note: 'Needs WebGPU. Weaker on Chinese in our earlier tests.',
   },
   'qwen3-asr': {
@@ -65,7 +66,7 @@ export const ASR_ENGINES: Record<AsrEngineId, AsrEngine> = {
     sizeMB: 1720,
     needsLanguage: false,
     languages: '30 languages, detects the language by itself',
-    available: true,
+    needsWebGpu: true,
     note: 'Needs WebGPU. Runs on our own runner, because Transformers.js cannot run this model.',
   },
 };
@@ -78,7 +79,7 @@ export const MT_ENGINES: Record<MtEngineId, MtEngine> = {
     dtype: 'q4f16',
     sizeMB: 675,
     languages: 'Translates to English and Russian',
-    available: true,
+    needsWebGpu: true,
     note: 'Needs WebGPU. Translates each phrase on its own, without the earlier phrases as context.',
   },
   none: {
@@ -88,7 +89,7 @@ export const MT_ENGINES: Record<MtEngineId, MtEngine> = {
     dtype: '',
     sizeMB: 0,
     languages: 'Shows the recognised text as it is',
-    available: true,
+    needsWebGpu: false,
     note: 'Subtitles in the language of the audio.',
   },
 };
@@ -99,19 +100,17 @@ export const WHISPER_LANGUAGES: Record<string, string> = {
   it: 'italian', pt: 'portuguese', ko: 'korean', ar: 'arabic', nl: 'dutch', pl: 'polish', tr: 'turkish', uk: 'ukrainian',
 };
 
-/** Source languages the settings offer. Cohere supports only some of them. */
-export const SOURCE_LANGUAGES: { code: string; label: string }[] = [
-  { code: 'auto', label: 'Detect automatically' },
-  { code: 'zh', label: 'Chinese' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'de', label: 'German' },
-  { code: 'en', label: 'English' },
-  { code: 'fr', label: 'French' },
-  { code: 'it', label: 'Italian' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'ru', label: 'Russian' },
-];
+/** A model with no repository (translation "none") has nothing to download. */
+export const requiresDownload = (engine: { repo: string }) => engine.repo !== '';
 
-export const totalDownloadMB = (asr: AsrEngineId, mt: MtEngineId) => ASR_ENGINES[asr].sizeMB + MT_ENGINES[mt].sizeMB;
+/** Why this speech model cannot handle the chosen source language, or null when it can. */
+export function sourceLanguageProblem(engine: AsrEngine, sourceLang: string): string | null {
+  if (engine.needsLanguage && sourceLang === 'auto') return `${engine.label} cannot detect the language. Choose the language of the audio.`;
+  if (engine.sourceCodes && sourceLang !== 'auto' && !engine.sourceCodes.includes(sourceLang)) {
+    return `${engine.label} does not support this language. Choose another speech model or language.`;
+  }
+  return null;
+}
+
+/** What the companion program runs through llama-server (see companion/ai_subtitles_companion/config.py). */
+export const COMPANION_MODELS = { asr: 'Qwen3-ASR 0.6B', mt: 'PLaMo 3 Translate 2B' };

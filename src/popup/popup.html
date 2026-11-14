@@ -6,15 +6,30 @@
     <title>Subtitles</title>
     <link rel="stylesheet" href="../ui/theme.css" />
     <style>
-      body { width: 320px; padding: 14px; display: grid; gap: 12px; }
+      body { width: 320px; padding: 16px; display: grid; gap: 14px; font-size: 13px; }
       header { display: flex; align-items: center; justify-content: space-between; }
       header h1 { font-size: 15px; }
-      #settings { padding: 4px 8px; border: 0; background: transparent; color: var(--text-2); font-size: 12px; }
-      #settings:hover { color: var(--text); text-decoration: underline; }
-      #toggle { width: 100%; padding: 12px; font-size: 15px; }
-      #detail { margin: 0; font-size: 12px; color: var(--danger); word-break: break-word; }
+      /* The status is a dot and a word, not a badge: the button below already says what to do. */
+      #state { padding: 0; background: none; }
+      #toggle { width: 100%; padding: 11px; font-size: 14px; }
+      #detail { margin: -6px 0 0; font-size: 12px; color: var(--danger); word-break: break-word; }
       #detail:empty { display: none; }
       #detail[data-kind="info"] { color: var(--text-2); }
+
+      /* One grid for everything below: a muted label on the left, the control or value on the right. */
+      .settings { display: grid; grid-template-columns: 88px 1fr; align-items: center; gap: 8px 10px; }
+      .settings > .label { margin: 0; font-weight: 500; letter-spacing: 0; }
+      .settings .segmented button { padding: 6px 4px; font-size: 12px; }
+      .settings select { padding: 6px 8px; font-size: 13px; }
+      select:disabled { opacity: .45; cursor: not-allowed; }
+
+      .models { margin: 0; padding-top: 12px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 88px 1fr; gap: 6px 10px; font-size: 12px; }
+      .models dt { color: var(--text-2); }
+      .models dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+      .models .missing { color: var(--warn); }
+
+      #settings { justify-self: center; padding: 2px 8px; border: 0; background: transparent; color: var(--text-2); font-size: 12px; }
+      #settings:hover { color: var(--text); text-decoration: underline; }
     </style>
   </head>
   <body>
@@ -26,23 +41,28 @@
     <button id="toggle" class="btn btn-primary">Start subtitles</button>
     <p id="detail" role="alert"></p>
 
-    <section class="card">
-      <span class="label" id="mode-label">Where recognition runs</span>
+    <div class="settings">
+      <span class="label" id="mode-label">Run on</span>
       <div class="segmented" id="mode" role="radiogroup" aria-labelledby="mode-label">
         <button role="radio" data-value="browser">Browser</button>
         <button role="radio" data-value="http">Computer</button>
         <button role="radio" data-value="native">Bridge</button>
       </div>
-      <p class="hint" id="mode-hint"></p>
-    </section>
 
-    <section class="card">
-      <label class="label" for="lang">Translate to</label>
-      <select id="lang">
-        <option value="en">English</option>
-        <option value="ru">Russian</option>
-      </select>
-    </section>
+      <span class="label" id="translate-label">Show</span>
+      <div class="segmented" id="translate-mode" role="radiogroup" aria-labelledby="translate-label">
+        <button role="radio" data-value="off">Subtitles</button>
+        <button role="radio" data-value="on">+ Translation</button>
+      </div>
+
+      <label class="label" for="lang" id="target-label" hidden>Translate to</label>
+      <select id="lang" hidden></select>
+
+      <label class="label" for="source-lang" id="source-label" hidden>Audio language</label>
+      <select id="source-lang" hidden></select>
+    </div>
+
+    <dl id="models" class="models"></dl>
 
     <button id="settings" type="button">Settings</button>
     <script type="module" src="./popup.ts"></script>

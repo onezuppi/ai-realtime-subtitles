@@ -1,4 +1,6 @@
-import type { Backend, BackendKind, HistoryItem, TranscribeResult } from '../core/backend';
+import type { Backend, BackendKind, HistoryItem, TranscribeResult } from '../../core/backend';
+import { parseQwen3Output } from '../../core/qwen3-asr-output';
+import { httpTransport, type Transport } from './transport';
 import { encodeWav, toBase64 } from './wav';
 
 export interface LlamaEndpoints {
@@ -8,43 +10,19 @@ export interface LlamaEndpoints {
   translate: string;
 }
 
+const ASR_TIMEOUT_MS = 15000;
+const TRANSLATE_TIMEOUT_MS = 8000;
+const ASR_MAX_TOKENS = 96;
+const TRANSLATE_MAX_TOKENS = 256;
+const CACHE_LIMIT = 200;
+
 export const DEFAULT_ENDPOINTS: LlamaEndpoints = { asr: 'http://127.0.0.1:8083', translate: 'http://127.0.0.1:8082' };
-
-/** How requests reach a llama-server: plain HTTP, or the native-messaging bridge. */
-export interface Transport {
-  post(base: string, path: string, body: unknown, timeoutMs: number): Promise<unknown>;
-  /** Throws when the server at `base` is not ready. */
-  ready(base: string): Promise<void>;
-}
-
-export const httpTransport: Transport = {
-  async post(base, path, body, timeoutMs) {
-    const response = await fetch(`${base}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!response.ok) throw new Error(`${base}${path} answered HTTP ${response.status}`);
-    return response.json();
-  },
-  async ready(base) {
-    const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
-    if (!response.ok) throw new Error(`${base} is not ready (HTTP ${response.status})`);
-  },
-};
 
 interface ChatReply {
   choices?: { message?: { content?: string } }[];
 }
 
 const content = (reply: unknown) => (reply as ChatReply).choices?.[0]?.message?.content ?? '';
-
-/** Qwen3-ASR answers "language X<asr_text>text". Returns both parts. */
-export function parseAsr(raw: string): TranscribeResult {
-  const match = raw.match(/^language\s+(\S+)<asr_text>([\s\S]*)$/);
-  return match ? { language: (match[1] ?? '').toLowerCase(), text: (match[2] ?? '').trim() } : { language: '', text: raw.trim() };
-}
 
 /** Backend for llama.cpp servers. The HTTP and native-bridge modes share it: only the transport differs. */
 export class LlamaBackend implements Backend {
@@ -68,12 +46,12 @@ export class LlamaBackend implements Backend {
       '/v1/chat/completions',
       {
         temperature: 0,
-        max_tokens: 96,
+        max_tokens: ASR_MAX_TOKENS,
         messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data, format: 'wav' } }] }],
       },
-      15000,
+      ASR_TIMEOUT_MS,
     );
-    return parseAsr(content(reply));
+    return parseQwen3Output(content(reply));
   }
 
   async translate(text: string, _sourceLanguage: string, targetLanguage: string, history: HistoryItem[]): Promise<string> {
@@ -94,16 +72,16 @@ export class LlamaBackend implements Backend {
       {
         model: 'plamo-3-translate',
         temperature: 0,
-        max_tokens: 256,
+        max_tokens: TRANSLATE_MAX_TOKENS,
         stop: ['<|plamo:tag|>', '<|plamo:bos|>'],
         chat_template_kwargs: { target_lang: targetLanguage },
         messages,
       },
-      8000,
+      TRANSLATE_TIMEOUT_MS,
     );
     const translated = content(reply).trim();
     if (translated) {
-      if (this.cache.size > 200) this.cache.clear();
+      if (this.cache.size > CACHE_LIMIT) this.cache.clear();
       this.cache.set(key, translated);
     }
     return translated;

@@ -1,9 +1,9 @@
-// Manual check against running llama-servers: pnpm exec vite-node scripts/smoke-llama.ts <file.wav>
+// Manual check against running llama-servers: pnpm smoke:llama <file.wav>
 import { readFileSync } from 'node:fs';
-import { LlamaBackend } from '../src/backends/llama-http';
+import { LlamaBackend } from '../../src/backends/llama/llama-backend';
 
 const file = process.argv[2];
-if (!file) throw new Error('usage: smoke-llama.ts <16 kHz mono 16-bit wav>');
+if (!file) throw new Error('usage: pnpm smoke:llama <16 kHz mono 16-bit wav>');
 const wav = readFileSync(file);
 const pcm = new Int16Array(wav.buffer.slice(wav.byteOffset + 44, wav.byteOffset + wav.length - ((wav.length - 44) % 2)));
 const samples = Float32Array.from(pcm, value => value / 32768);

@@ -1,5 +1,6 @@
 import type * as Ort from 'onnxruntime-web';
 import { logMel } from './mel';
+import { parseQwen3Output, TRANSCRIPT_TAG } from '../../../core/qwen3-asr-output';
 
 /**
  * Qwen3-ASR 0.6B on three ONNX files: audio encoder, token embeddings and a merged decoder with a key-value cache.
@@ -15,7 +16,6 @@ const HEAD_DIM = 128;
 const HIDDEN = 1024;
 const PROMPT_PREFIX = '<|im_start|>system\n<|im_end|>\n<|im_start|>user\n<|audio_start|>';
 const PROMPT_SUFFIX = '<|audio_end|><|im_end|>\n<|im_start|>assistant\n';
-const TRANSCRIPT_TAG = '<asr_text>';
 
 /** Language names the model understands after "language ". */
 export const QWEN3_LANGUAGES: Record<string, string> = {
@@ -44,17 +44,6 @@ export interface Qwen3Result {
   text: string;
   audioTokens: number;
   generated: number;
-}
-
-/** Splits "language English<asr_text>Hello" into its two parts. */
-export function parseOutput(raw: string, forcedLanguage: string | null): { language: string; text: string } {
-  const clean = (value: string) => value.replace(/<\|[^|>]*\|>/g, '').trim();
-  const at = raw.indexOf(TRANSCRIPT_TAG);
-  if (forcedLanguage || at === -1) return { language: '', text: clean(at === -1 ? raw : raw.slice(at + TRANSCRIPT_TAG.length)) };
-  const head = clean(raw.slice(0, at));
-  const match = /^language\s+(.*)$/im.exec(head);
-  const language = match?.[1]?.trim() ?? '';
-  return { language: /^none$/i.test(language) ? '' : language, text: clean(raw.slice(at + TRANSCRIPT_TAG.length)) };
 }
 
 const argmax = (values: Float32Array, offset: number, length: number) => {
@@ -148,5 +137,5 @@ export async function transcribeQwen3(
   for (const tensor of Object.values(past)) tensor.dispose?.();
 
   const raw = tokenizer.decode(generated, { skip_special_tokens: false });
-  return { ...parseOutput(raw, forced ?? null), audioTokens, generated: generated.length };
+  return { ...parseQwen3Output(raw, forced ?? null), audioTokens, generated: generated.length };
 }
