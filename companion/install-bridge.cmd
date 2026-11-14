@@ -11,7 +11,16 @@ if errorlevel 1 (
 )
 set "ACTION=%~1"
 if "%ACTION%"=="" set "ACTION=install"
-python -m ai_subtitles_companion %ACTION% %2 %3 %4
+rem Collect every argument after the action. %* would not do: it ignores shift and repeats the action.
+set "REST="
+shift
+:collect
+if "%~1"=="" goto run
+set "REST=%REST% %1"
+shift
+goto collect
+:run
+python -m ai_subtitles_companion %ACTION%%REST%
 set "RESULT=%errorlevel%"
 echo.
 pause

@@ -1,13 +1,10 @@
 import io
 import json
-import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from ai_subtitles_companion import bridge, install  # noqa: E402
-from ai_subtitles_companion.config import Config  # noqa: E402
+from ai_subtitles_companion import bridge, install
+from ai_subtitles_companion.config import Config
 
 
 def frame(message):
@@ -63,6 +60,20 @@ class HandleTest(unittest.TestCase):
             self.assertFalse(reply["ok"])
             self.assertIn("not allowed", reply["error"])
         self.assertEqual(calls, [])
+
+    def test_rejects_methods_other_than_get_and_post(self):
+        host, calls = self.make()
+        reply = host.handle({"id": 1, "target": "asr", "path": "/health", "method": "DELETE"})
+        self.assertFalse(reply["ok"])
+        self.assertIn("not allowed", reply["error"])
+        self.assertEqual(calls, [])
+
+    def test_answers_every_request_with_the_config_error(self):
+        host = bridge.Bridge(Config(autostart=False), lambda *a: self.fail("must not call"),
+                             config_error="config.json is invalid: x")
+        for target, path in (("asr", "/health"), ("companion", "/status")):
+            reply = host.handle({"id": 5, "target": target, "path": path, "method": "GET"})
+            self.assertEqual((reply["id"], reply["ok"], reply["error"]), (5, False, "config.json is invalid: x"))
 
     def test_passes_server_errors_through(self):
         host, _ = self.make({"ok": False, "status": 500, "error": "boom"})

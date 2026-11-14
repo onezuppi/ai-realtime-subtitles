@@ -28,7 +28,11 @@ ALLOWED_PATHS = {
     "translate": {"/health", "/v1/chat/completions"},
     "companion": {"/start", "/status"},
 }
-MAX_BODY = 64 * 1024 * 1024
+ALLOWED_METHODS = {"GET", "POST"}
+MAX_BODY = 64 * 1024 * 1024  # largest message accepted from the browser, in bytes
+REQUEST_TIMEOUT = 20  # seconds for model requests
+HEALTH_TIMEOUT = 3  # seconds for /health
+MAX_WORKERS = 4  # requests handled in parallel
 
 
 def read_message(stream: IO[bytes]) -> dict[str, Any] | None:
@@ -50,8 +54,11 @@ def encode_message(message: dict[str, Any]) -> bytes:
 
 
 class Bridge:
-    def __init__(self, config: Config, post: Callable[..., dict[str, Any]] | None = None) -> None:
+    def __init__(self, config: Config, post: Callable[..., dict[str, Any]] | None = None,
+                 config_error: str | None = None) -> None:
         self.config = config
+        # Set when config.json could not be read: every request is answered with this error.
+        self.config_error = config_error
         self._post = post or self._http
         self._ports = {"asr": config.asr_port, "translate": config.mt_port}
 
@@ -73,6 +80,11 @@ class Bridge:
         target, path = message.get("target"), message.get("path")
         if target not in ALLOWED_PATHS or path not in ALLOWED_PATHS[target]:
             return {**reply, "ok": False, "error": f"not allowed: {target} {path}"}
+        method = message.get("method", "POST")
+        if method not in ALLOWED_METHODS:
+            return {**reply, "ok": False, "error": f"not allowed: method {method}"}
+        if self.config_error:
+            return {**reply, "ok": False, "error": self.config_error}
         try:
             if target == "companion":
                 if path == "/start":
@@ -82,8 +94,8 @@ class Bridge:
                 return {**reply, "ok": all(state.values()), "status": 200, "data": state}
             if self.config.autostart and not servers.is_ready(self._ports[target]):
                 servers.start(self.config)
-            result = self._post(self._ports[target], path, message.get("method", "POST"), message.get("body"),
-                                20 if path != "/health" else 3)
+            timeout = HEALTH_TIMEOUT if path == "/health" else REQUEST_TIMEOUT
+            result = self._post(self._ports[target], path, method, message.get("body"), timeout)
             return {**reply, **result}
         except servers.SetupError as error:
             return {**reply, "ok": False, "error": str(error)}
@@ -101,10 +113,10 @@ class Bridge:
                 sink.write(encode_message(reply))
                 sink.flush()
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
             while (message := read_message(source)) is not None:
                 pool.submit(run, message)
 
 
-def main(config: Config) -> None:
-    Bridge(config).serve(sys.stdin.buffer, sys.stdout.buffer)
+def main(config: Config, config_error: str | None = None) -> None:
+    Bridge(config, config_error=config_error).serve(sys.stdin.buffer, sys.stdout.buffer)

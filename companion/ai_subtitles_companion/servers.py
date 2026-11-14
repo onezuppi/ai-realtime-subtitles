@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import os
-import re
-import shutil
 import signal
 import subprocess
 import sys
@@ -11,40 +9,16 @@ import time
 import urllib.request
 from pathlib import Path
 
-from .config import Config, app_dir
+from .config import Config, app_dir, ensure_app_dir
+from .errors import SetupError
+from .locate import find_llama_server
 
-LM_STUDIO_BACKENDS = Path.home() / ".lmstudio" / "extensions" / "backends"
-
-
-class SetupError(RuntimeError):
-    """Something the user must fix: a missing file or program."""
-
-
-def find_llama_server(config: Config) -> Path:
-    for candidate in (config.llama_server, os.environ.get("LLAMA_SERVER", "")):
-        if candidate:
-            path = Path(candidate)
-            if not path.exists():
-                raise SetupError(f"llama-server not found: {path}")
-            return path
-    on_path = shutil.which("llama-server")
-    if on_path:  # for example `brew install llama.cpp` on macOS
-        return Path(on_path)
-    # LM Studio keeps llama.cpp builds per platform. Prefer GPU builds: the plain AVX2 build runs on the CPU only.
-    patterns = {
-        "win32": ["llama.cpp-win-x86_64-vulkan-avx2-*"],
-        "darwin": ["llama.cpp-mac-arm64-apple-metal-advsimd-*"],
-    }.get(sys.platform, ["llama.cpp-linux-x86_64-vulkan-avx2-*", "llama.cpp-linux-x86_64-avx2-*"])
-    exe = "llama-server.exe" if sys.platform == "win32" else "llama-server"
-    for pattern in patterns:
-        found = []
-        for folder in LM_STUDIO_BACKENDS.glob(pattern):
-            match = re.search(r"-(\d+)\.(\d+)\.(\d+)$", folder.name)
-            if match and (folder / exe).exists():
-                found.append((tuple(int(part) for part in match.groups()), folder / exe))
-        if found:
-            return max(found)[1]
-    raise SetupError("llama-server not found. Set llama_server in config.json, set LLAMA_SERVER, or add it to PATH.")
+CONTEXT_SIZE = 4096  # llama-server -c
+GPU_LAYERS = 99  # llama-server -ngl: offload every layer to the GPU
+POLL_INTERVAL = 0.5
+LOG_TAIL_LINES = 20
+LOG_NAME = "servers.log"
+LEGACY_PID_NAME = "servers.pid"  # one file for all servers, written by older versions
 
 
 def model_files(config: Config) -> list[Path]:
@@ -58,7 +32,7 @@ def model_files(config: Config) -> list[Path]:
 
 def build_commands(config: Config, exe: Path) -> dict[str, list[str]]:
     root = config.models_path
-    common = ["--host", "127.0.0.1", "-c", "4096", "-ngl", "99", *(config.extra_args or [])]
+    common = ["--host", "127.0.0.1", "-c", str(CONTEXT_SIZE), "-ngl", str(GPU_LAYERS), *(config.extra_args or [])]
     return {
         "asr": [str(exe), "-m", str(root / config.asr_model), "--mmproj", str(root / config.asr_mmproj),
                 "--port", str(config.asr_port), "--alias", "qwen3-asr", *common],
@@ -75,53 +49,82 @@ def is_ready(port: int, timeout: float = 1.5) -> bool:
         return False
 
 
-def _pid_file() -> Path:
-    return app_dir() / "servers.pid"
+def pid_file(name: str, folder: Path | None = None) -> Path:
+    """One PID file per server, so starting one server never forgets the PID of the other."""
+    return (folder or app_dir()) / f"servers.{name}.pid"
+
+
+def _log_tail(path: Path) -> str:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[-LOG_TAIL_LINES:])
+
+
+def _launch(names: list[str], commands: dict[str, list[str]], folder: Path) -> dict[str, subprocess.Popen]:
+    # Detach the servers from this process so they survive when the browser closes the bridge.
+    detach = (
+        {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP}
+        if sys.platform == "win32"
+        else {"start_new_session": True}
+    )
+    processes = {}
+    with open(folder / LOG_NAME, "ab") as log:  # the children keep their own handles
+        for name in names:
+            process = subprocess.Popen(commands[name], stdout=log, stderr=log, stdin=subprocess.DEVNULL, **detach)
+            pid_file(name, folder).write_text(str(process.pid), encoding="utf-8")
+            processes[name] = process
+    return processes
 
 
 def start(config: Config, wait_seconds: float = 90) -> dict[str, bool]:
-    """Start the servers that are not running yet and wait until both answer /health."""
+    """Start the servers that are not running yet and wait until both answer /health.
+
+    Raises SetupError as soon as a started server exits, with the end of servers.log in the message.
+    """
     ports = {"asr": config.asr_port, "translate": config.mt_port}
     pending = [name for name, port in ports.items() if not is_ready(port)]
+    processes: dict[str, subprocess.Popen] = {}
+    folder = app_dir()
     if pending:
         model_files(config)
         commands = build_commands(config, find_llama_server(config))
-        log = open(app_dir() / "servers.log", "ab")
-        # Detach the servers from this process so they survive when the browser closes the bridge.
-        detach = (
-            {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP}
-            if sys.platform == "win32"
-            else {"start_new_session": True}
-        )
-        pids = []
-        for name in pending:
-            process = subprocess.Popen(commands[name], stdout=log, stderr=log, stdin=subprocess.DEVNULL, **detach)
-            pids.append(process.pid)
-        _pid_file().write_text("\n".join(map(str, pids)), encoding="utf-8")
+        folder = ensure_app_dir()
+        processes = _launch(pending, commands, folder)
     deadline = time.monotonic() + wait_seconds
-    while time.monotonic() < deadline:
+    while True:
         state = {name: is_ready(port) for name, port in ports.items()}
-        if all(state.values()):
+        if all(state.values()) or time.monotonic() >= deadline:
             return state
-        time.sleep(0.5)
-    return {name: is_ready(port) for name, port in ports.items()}
+        for name, process in processes.items():
+            code = process.poll()
+            if code is not None:
+                pid_file(name, folder).unlink(missing_ok=True)
+                tail = _log_tail(folder / LOG_NAME)
+                raise SetupError(f"{name} server exited with code {code}. End of {folder / LOG_NAME}:\n{tail}")
+        time.sleep(POLL_INTERVAL)
+
+
+def _kill(pid: str) -> bool:
+    if sys.platform == "win32":
+        return subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], capture_output=True).returncode == 0
+    try:
+        os.killpg(int(pid), signal.SIGTERM)  # each server leads its own session and process group
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 def stop() -> int:
     """Stop the servers this program started. Returns how many processes were stopped."""
-    path = _pid_file()
-    if not path.exists():
-        return 0
+    folder = app_dir()
+    paths = [pid_file(name, folder) for name in ("asr", "translate")] + [folder / LEGACY_PID_NAME]
     stopped = 0
-    for line in path.read_text(encoding="utf-8").split():
-        if sys.platform == "win32":
-            result = subprocess.run(["taskkill", "/PID", line, "/T", "/F"], capture_output=True)
-            stopped += result.returncode == 0
-        else:
-            try:
-                os.killpg(int(line), signal.SIGTERM)  # each server leads its own session and process group
-                stopped += 1
-            except OSError:
-                pass
-    path.unlink(missing_ok=True)
+    for path in paths:
+        if not path.exists():
+            continue
+        for pid in path.read_text(encoding="utf-8").split():
+            stopped += _kill(pid)
+        path.unlink(missing_ok=True)
     return stopped

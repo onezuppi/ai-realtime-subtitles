@@ -7,16 +7,26 @@ import sys
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from .errors import SetupError
+
 
 def app_dir() -> Path:
-    """Per-user data folder: %LOCALAPPDATA% on Windows, ~/Library/Application Support on macOS, ~/.config on Linux."""
+    """Per-user data folder: %LOCALAPPDATA% on Windows, ~/Library/Application Support on macOS, ~/.config on Linux.
+
+    Only computes the path. Code that writes into the folder calls ensure_app_dir() instead.
+    """
     if os.environ.get("LOCALAPPDATA"):
         base = Path(os.environ["LOCALAPPDATA"])
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    path = base / "ai-realtime-subtitles"
+    return base / "ai-realtime-subtitles"
+
+
+def ensure_app_dir() -> Path:
+    """The data folder, created if it does not exist yet."""
+    path = app_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -46,13 +56,20 @@ def config_path() -> Path:
 
 
 def load() -> Config:
+    """Read config.json. Raises SetupError if the file is not valid JSON or has values of the wrong shape."""
     path = config_path()
     if not path.exists():
         return Config()
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    known = {f.name for f in fields(Config)}
-    return Config(**{key: value for key, value in raw.items() if key in known})
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise TypeError(f"expected a JSON object, got {type(raw).__name__}")
+        known = {f.name for f in fields(Config)}
+        return Config(**{key: value for key, value in raw.items() if key in known})
+    except (ValueError, TypeError) as error:  # JSONDecodeError and UnicodeDecodeError are ValueErrors
+        raise SetupError(f"config.json is invalid: {error} ({path})") from error
 
 
 def save(config: Config) -> None:
+    ensure_app_dir()
     config_path().write_text(json.dumps(asdict(config), indent=2), encoding="utf-8")

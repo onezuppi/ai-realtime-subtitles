@@ -1,13 +1,12 @@
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from ai_subtitles_companion import HOST_NAME, install  # noqa: E402
+import ai_subtitles_companion
+from ai_subtitles_companion import HOST_NAME, install
+from ai_subtitles_companion.install import launcher
 
 IDS = ["abcdefghijklmnopabcdefghijklmnop"]
 
@@ -76,6 +75,28 @@ class PosixInstallTest(unittest.TestCase):
     def test_detect_uses_commands_on_the_path(self):
         with mock.patch("shutil.which", side_effect=lambda command: "/usr/bin/x" if command == "brave-browser" else None):
             self.assertEqual(install.detect_browsers("linux", self.home), ["brave"])
+
+
+class LauncherTest(unittest.TestCase):
+    def test_launcher_changes_into_the_folder_that_holds_the_package(self):
+        package_parent = Path(ai_subtitles_companion.__file__).resolve().parent.parent
+        self.assertEqual(launcher.PACKAGE_ROOT, package_parent)
+        with tempfile.TemporaryDirectory() as folder:
+            bat = install.write_launcher("win32", Path(folder)).read_text()
+            sh = install.write_launcher("linux", Path(folder)).read_text()
+        self.assertIn(f'cd /d "{package_parent}"', bat)
+        self.assertIn(f'cd "{launcher._sh_quoted(package_parent)}" || exit 1', sh)
+
+    def test_bat_doubles_percent_signs(self):
+        text = launcher.bat_text(Path("C:/a%PATH%b"), "C:/py/python.exe")
+        self.assertIn("a%%PATH%%b", text)
+        with self.assertRaises(ValueError):
+            launcher.bat_text(Path("C:/x"), 'C:/"py"/python.exe')
+
+    def test_sh_escapes_characters_special_inside_double_quotes(self):
+        text = launcher.sh_text('/home/a$b`c\\d"e', "/usr/bin/python3")
+        self.assertIn(r'cd "/home/a\$b\`c\\d\"e" || exit 1', text)
+        self.assertIn('exec "/usr/bin/python3" -m ai_subtitles_companion bridge', text)
 
 
 class BrowserNamesTest(unittest.TestCase):

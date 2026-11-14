@@ -1,6 +1,6 @@
 """Manual check: starts the bridge as the browser would and talks to the live llama servers.
 
-    python companion/tests/smoke_bridge.py [path-to-16kHz-mono.wav]
+    python companion/scripts/smoke_bridge.py [path-to-16kHz-mono.wav]
 """
 import base64
 import struct
@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent  # the companion folder
 sys.path.insert(0, str(ROOT))
 from ai_subtitles_companion import bridge  # noqa: E402
 
