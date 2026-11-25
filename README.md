@@ -29,13 +29,21 @@ For the faster modes install the program on your computer: see [Program on your 
 
 ## Models: what works and how
 
-| Model | Role | "Browser" mode | "Computer" and "Bridge" modes | Size | Languages | What was checked |
-|---|---|---|---|---|---|---|
-| Whisper small | Speech recognition | Yes. transformers.js, WebGPU or WASM | No | 589 MB | 99, detects the language itself (Transformers.js does not, the detection is written in `worker.ts`) | 2.1 s per segment with a chosen language, 3.3 s with auto-detection (same accuracy). Character errors: de 9%, es 0.3%, ru 0%, zh 46% (outputs traditional characters instead of the simplified ones in the reference), ja 59% |
-| Qwen3-ASR 0.6B | Speech recognition | Yes. WebGPU. Own runner on onnxruntime-web (`src/backends/browser/qwen3-asr/`), because Transformers.js cannot run this model | Yes. `llama-server` | 1.72 GB | 30 according to the model card, detects the language itself | Browser: 2.5 s per segment. de 13%, es 0.9%, ru 0%, zh 7%, ja 84%. `llama-server` gives the same errors (0.45 s per segment). Bridge: the exchange was checked over stdio |
-| Cohere Transcribe 2B | Speech recognition | Yes. WebGPU, `q4f16` | No | 1.54 GB | 14, **no Russian**; the language must be chosen | 1.2 s per segment, the fastest in the browser. de 7%, es 0.3%, zh 7%, ja 30% |
-| PLaMo 3 Translate 0.8B | Translation | Yes. WebGPU, `q4f16` | No | 708 MB | Translation into English and Russian | 1.9 s per phrase. Phrases are translated one by one, without context |
-| PLaMo 3 Translate 2B | Translation | No | Yes. `llama-server` | not measured | Translation into English and Russian | Computer: works, with the two previous phrases as context |
+| Model | Role | Runs in | Size | Languages |
+|---|---|---|---|---|
+| Whisper small | Speech recognition | "Browser": transformers.js, WebGPU or WASM | 589 MB | 99, detects the language itself |
+| Qwen3-ASR 0.6B | Speech recognition | "Browser": WebGPU. "Computer" and "Bridge": `llama-server` | 1.72 GB | 30 according to the model card, detects the language itself |
+| Cohere Transcribe 2B | Speech recognition | "Browser": WebGPU, `q4f16` | 1.54 GB | 14, **no Russian**; the language must be chosen |
+| PLaMo 3 Translate 0.8B | Translation | "Browser": WebGPU, `q4f16` | 708 MB | English and Russian |
+| PLaMo 3 Translate 2B | Translation | "Computer" and "Bridge": `llama-server` | not measured | English and Russian |
+
+What was checked, model by model:
+
+- **Whisper small.** 2.1 s per segment with a chosen language, 3.3 s with auto-detection (same accuracy). Transformers.js does not detect the language, so the detection is written in `worker.ts`. Character errors: de 9%, es 0.3%, ru 0%, zh 46% (outputs traditional characters instead of the simplified ones in the reference), ja 59%.
+- **Qwen3-ASR 0.6B.** Transformers.js cannot run this model, so it has its own runner on onnxruntime-web (`src/backends/browser/qwen3-asr/`). Browser: 2.5 s per segment. Errors: de 13%, es 0.9%, ru 0%, zh 7%, ja 84%. `llama-server` gives the same errors at 0.45 s per segment. Bridge: the exchange was checked over stdio.
+- **Cohere Transcribe 2B.** 1.2 s per segment, the fastest in the browser. Errors: de 7%, es 0.3%, zh 7%, ja 30%.
+- **PLaMo 3 Translate 0.8B.** 1.9 s per phrase. Phrases are translated one by one, without context.
+- **PLaMo 3 Translate 2B.** Works through `llama-server`, with the two previous phrases as context.
 
 Measurement: Windows 11, Brave 157 with WebGPU, 48 segments of 1.5-10 s (4.7 s on average) from real videos with reference subtitles (de, es, ja, zh, 10 each) and 8 Russian phrases voiced by Silero. The sample is small. The numbers show the order of magnitude, not a precise estimate. Japanese errors are high for all models, possibly because the reference is written differently (kanji and kana). Time includes sending audio to the worker, but not loading the models into it. Character errors are in percent (lower is better). Cohere always ran with a chosen language. Whisper and Qwen3-ASR ran with auto-detection in the first three tables unless stated otherwise. An empty cell means "not checked" or "the model does not support the language".
 
