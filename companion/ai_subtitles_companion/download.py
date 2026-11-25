@@ -116,23 +116,24 @@ def fetch(item: Item, target: Path, progress: Callable[[str, int, int, list[int]
     if have > item.size:
         part.unlink()
         have = 0
-    request = urllib.request.Request(item.url, headers={"User-Agent": "ai-realtime-subtitles"})
-    if have:
-        request.add_header("Range", f"bytes={have}-")
-    try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            if have and response.status != 206:  # the server ignored Range: start again
-                have = 0
-            last = [-1]
-            with open(part, "ab" if have else "wb") as file:
-                while chunk := response.read(CHUNK):
-                    file.write(chunk)
-                    have += len(chunk)
-                    progress(item.name, have, item.size, last)
-    except OSError as error:
-        raise SetupError(f"download of {item.name} failed: {error}. Run the command again to resume.") from error
-    if sys.stdout.isatty():
-        print()
+    if have < item.size:  # a complete .part (the run stopped before the rename) needs no request: a Range past the end gets 416
+        request = urllib.request.Request(item.url, headers={"User-Agent": "ai-realtime-subtitles"})
+        if have:
+            request.add_header("Range", f"bytes={have}-")
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                if have and response.status != 206:  # the server ignored Range: start again
+                    have = 0
+                last = [-1]
+                with open(part, "ab" if have else "wb") as file:
+                    while chunk := response.read(CHUNK):
+                        file.write(chunk)
+                        have += len(chunk)
+                        progress(item.name, have, item.size, last)
+        except OSError as error:
+            raise SetupError(f"download of {item.name} failed: {error}. Run the command again to resume.") from error
+        if sys.stdout.isatty():
+            print()
     if part.stat().st_size != item.size or _sha256(part) != item.sha256:
         part.unlink()
         raise SetupError(f"{item.name} is damaged or was replaced: size or SHA-256 differs. Run the command again.")
@@ -176,11 +177,22 @@ def download_server() -> Path:
     print(f"llama-server {LLAMA_TAG} ({item.name}, {item.size / 1e6:.0f} MB)")
     archive = llama_dir().parent / item.name
     fetch(item, archive)
-    extract(archive, llama_dir())
-    archive.unlink()
+    # Unpack beside the final folder and rename when complete: a run that stops half way (full disk) leaves no
+    # llama-server that a later run would take for a finished install.
+    staging = llama_dir().with_name(llama_dir().name + ".tmp")
+    shutil.rmtree(staging, ignore_errors=True)
+    try:
+        extract(archive, staging)
+        exe = "llama-server.exe" if sys.platform == "win32" else "llama-server"
+        if not any(staging.rglob(exe)):
+            raise SetupError(f"{item.name} has no llama-server inside")
+        shutil.rmtree(llama_dir(), ignore_errors=True)
+        staging.replace(llama_dir())
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+        archive.unlink(missing_ok=True)
     found = downloaded_llama_server()
     if found is None:
-        shutil.rmtree(llama_dir(), ignore_errors=True)
         raise SetupError(f"{item.name} has no llama-server inside")
     if sys.platform != "win32":
         found.chmod(found.stat().st_mode | 0o111)
@@ -191,7 +203,7 @@ def download_models(config: Config, parts: list[str]) -> None:
     for part in parts:
         for item in MODELS[part]:
             target = config.models_path / item.name
-            if target.exists():
+            if target.exists() and target.stat().st_size == item.size:  # the hash is checked when the file is downloaded
                 print(f"{item.name}: already there")
                 continue
             print(f"{item.name} ({item.size / 1e6:.0f} MB)")

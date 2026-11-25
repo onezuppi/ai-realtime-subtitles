@@ -155,7 +155,12 @@ Model file names can be changed in `config.json`. `llama-server` is searched for
 
 The bridge goes around the network. The browser starts the program itself and talks to it through an input-output channel (Native Messaging). There are no network requests, so VPN and proxies do not interfere. The program starts the model servers itself on the first request.
 
-**Install from a release.** Download the file `subtitles-companion-<system>` (Windows, Linux or macOS) from the Releases tab and double-click it. Python is not needed. The program asks which browsers to install for, copies itself into the data folder and registers the bridge. Administrator rights are not needed. The `check` and `uninstall` commands work as shown below: `subtitles-companion check`.
+**Install from a release.** Download the file for your system from the Releases tab. Python is not needed.
+
+- Windows: `subtitles-companion-windows-x64.exe`, double-click it.
+- Linux and macOS: `subtitles-companion-linux-x64.tar.gz` or `subtitles-companion-macos-arm64.tar.gz`. Unpack it and run `./subtitles-companion` in a terminal. If macOS refuses to open the unsigned program, run `xattr -d com.apple.quarantine subtitles-companion` first.
+
+The program asks which browsers to install for, copies itself into the data folder and registers the bridge. Administrator rights are not needed. The `check` and `uninstall` commands work as shown below: `subtitles-companion check`.
 
 **Install from source.** Python 3.10 or newer is needed. Works on Windows, macOS and Linux.
 

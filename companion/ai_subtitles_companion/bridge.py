@@ -19,7 +19,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import IO, Any, Callable
 
-from . import servers
+from . import localhttp, servers
 from .config import Config
 
 # The paths each target accepts.
@@ -53,6 +53,16 @@ def encode_message(message: dict[str, Any]) -> bytes:
     return struct.pack("<I", len(data)) + data
 
 
+def _start_targets(body: Any) -> tuple[str, ...]:
+    """The servers a /start request asks for: body {"targets": ["asr"]}, or both when the body has none."""
+    targets = body.get("targets") if isinstance(body, dict) else None
+    if targets is None:
+        return servers.NAMES
+    if not isinstance(targets, list) or not targets or not set(targets) <= set(servers.NAMES):
+        raise servers.SetupError('targets must be a non-empty list of "asr" and "translate"')
+    return tuple(dict.fromkeys(targets))
+
+
 class Bridge:
     def __init__(self, config: Config, post: Callable[..., dict[str, Any]] | None = None,
                  config_error: str | None = None) -> None:
@@ -67,7 +77,7 @@ class Bridge:
         request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data, method=method,
                                          headers={"content-type": "application/json"})
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with localhttp.opener.open(request, timeout=timeout) as response:
                 text = response.read().decode("utf-8")
                 return {"ok": True, "status": response.status, "data": json.loads(text) if text else None}
         except urllib.error.HTTPError as error:
@@ -88,7 +98,7 @@ class Bridge:
         try:
             if target == "companion":
                 if path == "/start":
-                    state = servers.start(self.config)
+                    state = servers.start(self.config, names=_start_targets(message.get("body")))
                 else:
                     state = {name: servers.is_ready(port) for name, port in self._ports.items()}
                 return {**reply, "ok": all(state.values()), "status": 200, "data": state}

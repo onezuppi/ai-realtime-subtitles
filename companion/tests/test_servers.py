@@ -89,6 +89,24 @@ class StartStopTest(TempDataFolder):
         self.assertEqual(sorted(call.args[0] for call in kill.call_args_list), ["111", "222"])
         self.assertEqual(list(self.folder.glob("*.pid")), [])
 
+    def test_plain_subtitles_start_only_the_asr_server(self):
+        launched = []
+
+        def popen(command, **kwargs):
+            launched.append(command)
+            ready.add(ASR)
+            return FakeProcess(444)
+
+        ready = set()
+        with mock.patch.object(servers, "is_ready", side_effect=lambda port, timeout=1.5: port in ready),                 mock.patch.object(servers, "find_llama_server", return_value=Path("llama-server")),                 mock.patch("subprocess.Popen", side_effect=popen):
+            (self.root / self.config.asr_model).write_text("")
+            (self.root / self.config.asr_mmproj).write_text("")  # no translation model on disk
+            state = servers.start(self.config, wait_seconds=5, names=("asr",))
+        self.assertEqual(state, {"asr": True})
+        self.assertEqual(len(launched), 1)
+        self.assertIn(str(ASR), launched[0])
+        self.assertFalse(servers.pid_file("translate").exists())
+
     def test_stop_also_reads_the_old_single_pid_file(self):
         self.folder.mkdir()
         (self.folder / "servers.pid").write_text("10\n20")

@@ -65,9 +65,29 @@ def load() -> Config:
         if not isinstance(raw, dict):
             raise TypeError(f"expected a JSON object, got {type(raw).__name__}")
         known = {f.name for f in fields(Config)}
-        return Config(**{key: value for key, value in raw.items() if key in known})
+        config = Config(**{key: value for key, value in raw.items() if key in known})
+        validate(config)
+        return config
     except (ValueError, TypeError) as error:  # JSONDecodeError and UnicodeDecodeError are ValueErrors
         raise SetupError(f"config.json is invalid: {error} ({path})") from error
+
+
+def validate(config: Config) -> None:
+    """Raise ValueError for a value of the wrong type or range. The dataclass annotations are not checked at runtime."""
+    for name in ("models_dir", "asr_model", "asr_mmproj", "mt_model", "llama_server"):
+        if not isinstance(getattr(config, name), str):
+            raise ValueError(f"{name} must be a string")
+    for name in ("asr_port", "mt_port"):
+        port = getattr(config, name)
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError(f"{name} must be a port number from 1 to 65535")
+    if config.asr_port == config.mt_port:
+        raise ValueError("asr_port and mt_port must differ")
+    if not isinstance(config.autostart, bool):
+        raise ValueError("autostart must be true or false")
+    if config.extra_args is not None and not (
+            isinstance(config.extra_args, list) and all(isinstance(arg, str) for arg in config.extra_args)):
+        raise ValueError("extra_args must be a list of strings")
 
 
 def save(config: Config) -> None:

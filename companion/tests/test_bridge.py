@@ -2,6 +2,7 @@ import io
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from ai_subtitles_companion import bridge, install
 from ai_subtitles_companion.config import Config
@@ -42,6 +43,23 @@ class HandleTest(unittest.TestCase):
         host.handle({"id": 2, "target": "translate", "path": "/v1/chat/completions", "method": "POST", "body": {}})
         self.assertEqual([c[0] for c in calls], [1111, 2222])
         self.assertEqual(calls[0][3], {"x": 1})
+
+    def test_start_passes_the_requested_targets_to_the_servers(self):
+        host, _ = self.make()
+        with mock.patch.object(bridge.servers, "start", return_value={"asr": True}) as start:
+            reply = host.handle({"id": 5, "target": "companion", "path": "/start", "method": "POST",
+                                 "body": {"targets": ["asr"]}})
+            self.assertEqual(start.call_args.kwargs["names"], ("asr",))
+            self.assertTrue(reply["ok"])
+            host.handle({"id": 6, "target": "companion", "path": "/start", "method": "POST"})
+            self.assertEqual(start.call_args.kwargs["names"], ("asr", "translate"))
+
+    def test_start_refuses_targets_that_are_not_servers(self):
+        host, _ = self.make()
+        for body in ({"targets": ["evil"]}, {"targets": []}, {"targets": "asr"}):
+            reply = host.handle({"id": 7, "target": "companion", "path": "/start", "method": "POST", "body": body})
+            self.assertFalse(reply["ok"], body)
+            self.assertIn("targets", reply["error"])
 
     def test_keeps_the_request_id(self):
         host, _ = self.make()

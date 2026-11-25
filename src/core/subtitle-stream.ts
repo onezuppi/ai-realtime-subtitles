@@ -161,6 +161,7 @@ export class SubtitleStream {
     const h = this.handlers;
     if (generation !== this.generation) return;
     h.onState('busy');
+    let failed = false;
     try {
       const source = h.cleanText((await h.transcribe(samples)) || '');
       if (generation !== this.generation || !source) return;
@@ -170,9 +171,11 @@ export class SubtitleStream {
       this.history = [...this.history, { source, target }].slice(-2);
       await h.emit({ text: target, source });
     } catch (error) {
+      failed = true;
       if (generation === this.generation) h.onError(error);
     } finally {
-      if (generation === this.generation && !this.jobs.length) h.onState('idle');
+      // After a failure stay in the error state: "idle" would replace it with "listening" and hide the cause.
+      if (generation === this.generation && !this.jobs.length && !failed) h.onState('idle');
     }
   }
 }

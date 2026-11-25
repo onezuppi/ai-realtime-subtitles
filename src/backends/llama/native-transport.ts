@@ -19,8 +19,8 @@ export function nativeTransport(send: Send): Transport {
   return {
     post: (base, path, body) => call({ target: target(base), path, method: 'POST', body }),
     async ready(base) {
-      // The first call also starts the model servers when the companion has autostart on.
-      await call({ target: 'companion', path: '/start', method: 'POST' });
+      // Starts only the server this call is about: plain subtitles never load the translation model.
+      await call({ target: 'companion', path: '/start', method: 'POST', body: { targets: [target(base)] } });
       await call({ target: target(base), path: '/health', method: 'GET' });
     },
   };

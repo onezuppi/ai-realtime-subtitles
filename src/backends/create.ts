@@ -8,9 +8,9 @@ import { NATIVE_ENDPOINTS, nativeTransport, sendViaServiceWorker } from './llama
 export function createBackend(settings: Settings): Backend {
   switch (settings.mode) {
     case 'http':
-      return new LlamaBackend('http');
+      return new LlamaBackend('http', undefined, undefined, settings.translate);
     case 'native':
-      return new LlamaBackend('native', NATIVE_ENDPOINTS, nativeTransport(sendViaServiceWorker));
+      return new LlamaBackend('native', NATIVE_ENDPOINTS, nativeTransport(sendViaServiceWorker), settings.translate);
     case 'browser':
       return new BrowserBackend({
         asr: settings.asrEngine,

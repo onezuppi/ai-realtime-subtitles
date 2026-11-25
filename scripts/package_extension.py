@@ -41,6 +41,11 @@ def main() -> int:
     if not (dist / "manifest.json").exists():
         print("error: dist/manifest.json not found, run `pnpm build` first", file=sys.stderr)
         return 1
+    built = json.loads((dist / "manifest.json").read_text(encoding="utf-8"))["version"]
+    if built != version:
+        print(f"error: dist/manifest.json has version {built}, the sources have {version}. Run `pnpm build` again.",
+              file=sys.stderr)
+        return 1
     out = ROOT / "release" / f"ai-realtime-subtitles-{version}.zip"
     out.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:

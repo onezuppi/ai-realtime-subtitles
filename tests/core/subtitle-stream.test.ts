@@ -28,6 +28,21 @@ const pause = (stream: SubtitleStream) => {
 };
 
 describe('SubtitleStream', () => {
+  it('does not report idle right after an error, so the error stays visible', async () => {
+    const states: string[] = [];
+    const { stream, errors } = setup({}, {
+      transcribe: async () => {
+        throw new Error('server gone');
+      },
+      onState: state => void states.push(state),
+    });
+    stream.push(block(0.1));
+    pause(stream);
+    await stream.idle();
+    expect(errors).toHaveLength(1);
+    expect(states).toEqual(['busy']);
+  });
+
   it('waits for a pause and handles each phrase once', async () => {
     const { stream, captions } = setup();
     stream.push(block(0.1));

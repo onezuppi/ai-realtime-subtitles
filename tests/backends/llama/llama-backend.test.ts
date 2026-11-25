@@ -6,6 +6,16 @@ const reply = (text: string) => ({ choices: [{ message: { content: text } }] });
 const transport = (post: (url: string, body: any) => Promise<unknown>): Transport => ({ post: (base, path, body) => post(base + path, body), ready: async () => {} });
 
 describe('LlamaBackend', () => {
+  it('checks the translation server only when translation is on', async () => {
+    const checked: string[] = [];
+    const watching: Transport = { post: async () => ({}), ready: async base => void checked.push(base) };
+    await new LlamaBackend('http', undefined, watching, false).start();
+    expect(checked).toEqual(['http://127.0.0.1:8083']);
+    checked.length = 0;
+    await new LlamaBackend('http', undefined, watching, true).start();
+    expect(checked).toEqual(['http://127.0.0.1:8083', 'http://127.0.0.1:8082']);
+  });
+
   it('sends audio as input_audio and parses the answer', async () => {
     const calls: { url: string; body: any }[] = [];
     const backend = new LlamaBackend('http', undefined, transport(async (url, body) => (calls.push({ url, body }), reply('language Spanish<asr_text>hola'))));

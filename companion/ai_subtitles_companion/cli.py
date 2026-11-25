@@ -32,7 +32,11 @@ def cmd_bridge(args: argparse.Namespace, config: cfg.Config) -> int:
 
 
 def cmd_serve(args: argparse.Namespace, config: cfg.Config) -> int:
-    state = servers.start(config)
+    try:
+        state = servers.start(config)
+    except KeyboardInterrupt:  # Ctrl+C during warm-up: the servers are already detached from this process
+        print(f"stopped {servers.stop()} process(es)")
+        return 1
     print(f"asr :{config.asr_port} {'ready' if state['asr'] else 'NOT ready'}, "
           f"translate :{config.mt_port} {'ready' if state['translate'] else 'NOT ready'}. Ctrl+C stops them.")
     try:
@@ -116,6 +120,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if any(arg.startswith("chrome-extension://") for arg in argv):
+        argv = ["bridge"]  # the browser starts a registered host with the extension origin as its argument
     args = build_parser().parse_args(argv)
     if args.command is None:
         # Started without a command, for example by a double click on the packaged program: install.

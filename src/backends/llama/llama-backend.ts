@@ -32,11 +32,13 @@ export class LlamaBackend implements Backend {
     readonly kind: BackendKind = 'http',
     private readonly endpoints: LlamaEndpoints = DEFAULT_ENDPOINTS,
     private readonly transport: Transport = httpTransport,
+    /** False for plain subtitles: the translation server is neither checked nor started. */
+    private readonly withTranslation = true,
   ) {}
 
   async start(): Promise<void> {
     await this.transport.ready(this.endpoints.asr);
-    await this.transport.ready(this.endpoints.translate);
+    if (this.withTranslation) await this.transport.ready(this.endpoints.translate);
   }
 
   async transcribe(samples: Float32Array, sampleRate: number): Promise<TranscribeResult> {

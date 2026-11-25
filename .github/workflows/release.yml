@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   extension:
@@ -24,7 +24,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      - run: python scripts/package_extension.py ${{ startsWith(github.ref, 'refs/tags/') && format('--tag {0}', github.ref_name) || '' }}
+      - name: Pack the extension
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: python scripts/package_extension.py ${TAG:+--tag "$TAG"}
       - uses: actions/upload-artifact@v4
         with:
           name: extension
@@ -50,17 +53,19 @@ jobs:
       - run: python -m unittest discover -s tests
       - run: python -m pip install pyinstaller
       - run: python -m PyInstaller --onefile --name subtitles-companion entry.py
-      - name: Smoke test the packaged program
+      - name: Smoke test the packaged program as the browser starts it
         shell: bash
-        run: ./dist/subtitles-companion* status
+        run: python scripts/smoke_packaged.py ./dist/subtitles-companion*
       - name: Name the file after the system
         shell: bash
         run: |
           mkdir -p out
-          for f in dist/subtitles-companion*; do
-            ext="${f##*subtitles-companion}"
-            cp "$f" "out/subtitles-companion-${{ matrix.name }}${ext}"
-          done
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp dist/subtitles-companion.exe "out/subtitles-companion-${{ matrix.name }}.exe"
+          else
+            # A browser download drops the executable bit, a tar.gz keeps it.
+            tar -czf "out/subtitles-companion-${{ matrix.name }}.tar.gz" -C dist subtitles-companion
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: companion-${{ matrix.name }}
@@ -70,6 +75,8 @@ jobs:
     needs: [extension, companion]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:

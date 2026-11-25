@@ -66,6 +66,12 @@ class FetchTest(unittest.TestCase):
         download.fetch(self.item(), target, self.quiet)
         self.assertEqual(target.read_bytes(), self.data)
 
+    def test_complete_part_file_needs_no_request(self):
+        target = self.root / "file.bin"
+        target.with_name("file.bin.part").write_bytes(self.data)
+        download.fetch(self.item(url="http://127.0.0.1:1/unreachable"), target, self.quiet)
+        self.assertEqual(target.read_bytes(), self.data)
+
     def test_wrong_hash_is_refused_and_leaves_no_file(self):
         target = self.root / "file.bin"
         with self.assertRaises(SetupError):
@@ -135,6 +141,16 @@ class CatalogTest(unittest.TestCase):
             self.assertEqual(len(download.missing_models(config)), 3)
             (Path(folder) / config.mt_model).write_bytes(b"x")
             self.assertNotIn(config.mt_model, download.missing_models(config))
+
+    def test_a_model_file_of_the_wrong_size_is_downloaded_again(self):
+        with tempfile.TemporaryDirectory() as folder:
+            config = Config(models_dir=folder)
+            item = download.MODELS["translate"][0]
+            (Path(folder) / item.name).write_bytes(b"x")
+            with mock.patch.object(download, "fetch") as fetch:
+                download.download_models(config, ["translate"])
+            fetch.assert_called_once()
+            self.assertEqual(fetch.call_args.args[0], item)
 
     def test_unknown_platform_asks_for_a_manual_install(self):
         with mock.patch.object(download, "_system", return_value="freebsd"):

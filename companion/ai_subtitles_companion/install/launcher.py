@@ -38,14 +38,6 @@ def sh_text(package_root: Path, python: str) -> str:
     return f'#!/bin/sh\ncd "{_sh_quoted(package_root)}" || exit 1\nexec "{_sh_quoted(python)}" {MODULE_COMMAND}\n'
 
 
-def frozen_bat_text(program: str) -> str:
-    return f'@echo off\r\n"{_bat_quoted(program)}" bridge\r\n'
-
-
-def frozen_sh_text(program: str) -> str:
-    return f'#!/bin/sh\nexec "{_sh_quoted(program)}" bridge\n'
-
-
 def _keep_program(folder: Path) -> str:
     """Copy the packaged program into the data folder, so that moving or deleting the download does not break the bridge."""
     source = Path(sys.executable)
@@ -59,18 +51,16 @@ def _keep_program(folder: Path) -> str:
 
 
 def write(windows: bool, folder: Path) -> Path:
-    """Write host.bat (Windows) or host.sh (macOS, Linux) into the folder and return its path.
+    """The program the browser starts: host.bat (Windows) or host.sh (macOS, Linux) written into the folder.
 
-    In a packaged build (PyInstaller) sys.executable is the program itself: it has no package folder to change
-    into and takes the command directly.
+    A packaged build (PyInstaller) is registered directly: the browser starts the program with the extension
+    origin as its argument and the program answers that as the `bridge` command. No script, so a user name with
+    non-ASCII letters cannot break a .bat file that cmd.exe reads in another code page.
     """
-    frozen = getattr(sys, "frozen", False)
+    if getattr(sys, "frozen", False):
+        return Path(_keep_program(folder))
     launcher = folder / ("host.bat" if windows else "host.sh")
-    if frozen:
-        program = _keep_program(folder)
-        text = frozen_bat_text(program) if windows else frozen_sh_text(program)
-    else:
-        text = bat_text(PACKAGE_ROOT, sys.executable) if windows else sh_text(PACKAGE_ROOT, sys.executable)
+    text = bat_text(PACKAGE_ROOT, sys.executable) if windows else sh_text(PACKAGE_ROOT, sys.executable)
     # Bytes, not write_text: on Windows write_text would double the carriage return of a .bat file.
     launcher.write_bytes(text.encode("utf-8"))
     if not windows:

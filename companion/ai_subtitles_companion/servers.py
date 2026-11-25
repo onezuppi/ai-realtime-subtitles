@@ -6,9 +6,9 @@ import signal
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
+from . import localhttp
 from .config import Config, app_dir, ensure_app_dir
 from .errors import SetupError
 from .locate import find_llama_server
@@ -19,11 +19,16 @@ POLL_INTERVAL = 0.5
 LOG_TAIL_LINES = 20
 LOG_NAME = "servers.log"
 LEGACY_PID_NAME = "servers.pid"  # one file for all servers, written by older versions
+NAMES = ("asr", "translate")
 
 
-def model_files(config: Config) -> list[Path]:
+def model_files(config: Config, names: tuple[str, ...] = NAMES) -> list[Path]:
     root = config.models_path
-    files = [root / config.asr_model, root / config.asr_mmproj, root / config.mt_model]
+    files = []
+    if "asr" in names:
+        files += [root / config.asr_model, root / config.asr_mmproj]
+    if "translate" in names:
+        files.append(root / config.mt_model)
     missing = [str(f) for f in files if not f.exists()]
     if missing:
         raise SetupError("Model files not found: " + ", ".join(missing))
@@ -43,7 +48,7 @@ def build_commands(config: Config, exe: Path) -> dict[str, list[str]]:
 
 def is_ready(port: int, timeout: float = 1.5) -> bool:
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout) as response:
+        with localhttp.opener.open(f"http://127.0.0.1:{port}/health", timeout=timeout) as response:
             return response.status == 200
     except OSError:
         return False
@@ -78,17 +83,18 @@ def _launch(names: list[str], commands: dict[str, list[str]], folder: Path) -> d
     return processes
 
 
-def start(config: Config, wait_seconds: float = 90) -> dict[str, bool]:
-    """Start the servers that are not running yet and wait until both answer /health.
+def start(config: Config, wait_seconds: float = 90, names: tuple[str, ...] = NAMES) -> dict[str, bool]:
+    """Start the named servers that are not running yet and wait until they answer /health.
 
+    Plain subtitles need only "asr": the translation model is neither required on disk nor loaded.
     Raises SetupError as soon as a started server exits, with the end of servers.log in the message.
     """
-    ports = {"asr": config.asr_port, "translate": config.mt_port}
+    ports = {name: port for name, port in (("asr", config.asr_port), ("translate", config.mt_port)) if name in names}
     pending = [name for name, port in ports.items() if not is_ready(port)]
     processes: dict[str, subprocess.Popen] = {}
     folder = app_dir()
     if pending:
-        model_files(config)
+        model_files(config, tuple(pending))
         commands = build_commands(config, find_llama_server(config))
         folder = ensure_app_dir()
         processes = _launch(pending, commands, folder)

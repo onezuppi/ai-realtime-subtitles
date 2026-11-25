@@ -88,7 +88,7 @@ class LauncherTest(unittest.TestCase):
         self.assertIn(f'cd /d "{package_parent}"', bat)
         self.assertIn(f'cd "{launcher._sh_quoted(package_parent)}" || exit 1', sh)
 
-    def test_packaged_build_launcher_runs_the_program_directly(self):
+    def test_packaged_build_is_registered_directly(self):
         with tempfile.TemporaryDirectory() as root:
             download = Path(root) / "download" / "companion.exe"
             download.parent.mkdir()
@@ -96,12 +96,10 @@ class LauncherTest(unittest.TestCase):
             data = Path(root) / "data"
             data.mkdir()
             with mock.patch.object(sys, "frozen", True, create=True), mock.patch.object(sys, "executable", str(download)):
-                bat = install.write_launcher("win32", data).read_bytes().decode()
-                sh = install.write_launcher("linux", data).read_bytes().decode()
-            kept = data / "companion.exe"
-            self.assertEqual(kept.read_bytes(), b"program")
-            self.assertEqual(bat, f'@echo off\r\n"{kept}" bridge\r\n')
-            self.assertEqual(sh, f'#!/bin/sh\nexec "{launcher._sh_quoted(kept)}" bridge\n')
+                for platform in ("win32", "linux", "darwin"):
+                    self.assertEqual(install.write_launcher(platform, data), data / "companion.exe")
+            self.assertEqual((data / "companion.exe").read_bytes(), b"program")
+            self.assertEqual(sorted(path.name for path in data.iterdir()), ["companion.exe"])  # no .bat or .sh
 
     def test_bat_doubles_percent_signs(self):
         text = launcher.bat_text(Path("C:/a%PATH%b"), "C:/py/python.exe")

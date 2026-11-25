@@ -36,6 +36,16 @@ class ConfigTest(unittest.TestCase):
         cfg.config_path().write_text(json.dumps({"mt_port": 1234, "future_option": 1}), encoding="utf-8")
         self.assertEqual(cfg.load().mt_port, 1234)
 
+    def test_values_of_the_wrong_type_or_range_are_refused(self):
+        self.folder.mkdir()
+        bad = [{"asr_port": "8083"}, {"asr_port": 0}, {"mt_port": 70000}, {"asr_port": True},
+               {"asr_port": 9000, "mt_port": 9000}, {"models_dir": 5}, {"autostart": "yes"},
+               {"extra_args": "-ngl 0"}, {"extra_args": [1]}]
+        for values in bad:
+            cfg.config_path().write_text(json.dumps(values), encoding="utf-8")
+            with self.assertRaises(SetupError, msg=str(values)):
+                cfg.load()
+
     def test_corrupt_json_raises_setup_error(self):
         self.folder.mkdir()
         for text in ("{not json", "[1, 2]", "\xff"):
@@ -50,6 +60,11 @@ class ConfigTest(unittest.TestCase):
         with mock.patch.object(cli.bridge, "main") as bridge_main:
             self.assertEqual(cli.main(["bridge"]), 0)
         self.assertIn("config.json is invalid", bridge_main.call_args.kwargs["config_error"])
+
+    def test_browser_start_with_the_extension_origin_runs_the_bridge(self):
+        with mock.patch.object(cli.bridge, "main") as bridge_main:
+            self.assertEqual(cli.main(["chrome-extension://abcdefghijklmnopabcdefghijklmnop/", "--parent-window=0"]), 0)
+        bridge_main.assert_called_once()
 
     def test_other_commands_report_a_corrupt_config(self):
         self.folder.mkdir()
