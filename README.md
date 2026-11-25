@@ -1,187 +1,198 @@
 # ai-realtime-subtitles
 
-Расширение для Chromium-браузеров (Manifest V3): субтитры и перевод аудио вкладки в реальном времени на локальных моделях.
+**English** | [Русский](README.ru.md)
 
-Код написан с нуля на TypeScript. Расширение `subtitle-anything-local` служит только референсом.
+A Chromium browser extension (Manifest V3) that shows real-time subtitles and translation of tab audio using local models.
 
-![Субтитры поверх видео](docs/example.webp)
+The code is written from scratch in TypeScript. The extension `subtitle-anything-local` served only as a reference.
 
-## Режимы работы
+![Subtitles over a video](docs/example.webp)
 
-1. **Только браузер.** Модели работают в браузере (WebGPU и WASM). Установка программ не нужна.
-2. **С программой на компьютере.** Программа на Python запускает `llama-server` с моделями. Работает быстрее.
-3. **Связь с программой.** Два транспорта: HTTP на `127.0.0.1` или мост Native Messaging (работает и в окнах Tor).
+## Modes
 
-Все режимы реализуют один интерфейс `Backend` ([src/core/backend.ts](src/core/backend.ts)).
+1. **Browser only.** The models run in the browser (WebGPU and WASM). No programs to install.
+2. **With a program on your computer.** A Python program starts `llama-server` with the models. Faster.
+3. **Connection to the program.** Two transports: HTTP on `127.0.0.1`, or a Native Messaging bridge (works in Tor windows too).
 
-## Модели: что и как работает
+All modes implement one `Backend` interface ([src/core/backend.ts](src/core/backend.ts)).
 
-| Модель | Роль | Режим "Браузер" | Режимы "Компьютер" и "Мост" | Размер | Языки | Что проверено |
+In the popup the modes are called "Browser", "Computer" (HTTP) and "Bridge".
+
+## Quick start
+
+1. Download `ai-realtime-subtitles-<version>.zip` from the Releases tab and unpack it into a permanent folder.
+2. Open `chrome://extensions`, turn on developer mode, press "Load unpacked" and select the folder. The extension ID stays `fdpmchjhigcggmmcilchcakdnocflcbf` (pinned by the key in the manifest), so the bridge accepts it.
+3. Open the extension settings page and press "Download" next to the models you want (mode "Browser"). Nothing else is needed.
+4. Open a tab with audio, press the extension icon and press "Start subtitles".
+
+For the faster modes install the program on your computer: see [Program on your computer](#program-on-your-computer-python-companion).
+
+## Models: what works and how
+
+| Model | Role | "Browser" mode | "Computer" and "Bridge" modes | Size | Languages | What was checked |
 |---|---|---|---|---|---|---|
-| Whisper small | Распознавание | Да. transformers.js, WebGPU или WASM | Нет | 589 МБ | 99, язык определяет сама (Transformers.js этого не делает, определение написано в `worker.ts`) | 2,1 с на сегмент с выбранным языком, 3,3 с с автоопределением (точность одинаковая). Ошибки символов: de 9%, es 0,3%, ru 0%, zh 46% (выдаёт традиционные иероглифы вместо упрощённых из эталона), ja 59% |
-| Qwen3-ASR 0.6B | Распознавание | Да. WebGPU. Свой запуск на onnxruntime-web (`src/backends/browser/qwen3-asr/`), потому что Transformers.js эту модель не умеет | Да. `llama-server` | 1,72 ГБ | 30 по карточке модели, язык определяет сама | Браузер: 2,5 с на сегмент. de 13%, es 0,9%, ru 0%, zh 7%, ja 84%. Те же ошибки у `llama-server` (0,45 с на сегмент). Мост: обмен проверен по stdio, в самом браузере не проверен |
-| Cohere Transcribe 2B | Распознавание | Да. WebGPU, `q4f16` | Нет | 1,54 ГБ | 14, **без русского**; язык нужно выбрать | 1,2 с на сегмент, самая быстрая в браузере. de 7%, es 0,3%, zh 7%, ja 30% |
-| PLaMo 3 Translate 0.8B | Перевод | Да. WebGPU, `q4f16` | Нет | 708 МБ | Перевод на английский и русский | 1,9 с на фразу. Фразы переводятся по одной, без контекста |
-| PLaMo 3 Translate 2B | Перевод | Нет | Да. `llama-server` | не измерял | Перевод на английский и русский | Компьютер: работает, с контекстом из двух прошлых фраз |
+| Whisper small | Speech recognition | Yes. transformers.js, WebGPU or WASM | No | 589 MB | 99, detects the language itself (Transformers.js does not, the detection is written in `worker.ts`) | 2.1 s per segment with a chosen language, 3.3 s with auto-detection (same accuracy). Character errors: de 9%, es 0.3%, ru 0%, zh 46% (outputs traditional characters instead of the simplified ones in the reference), ja 59% |
+| Qwen3-ASR 0.6B | Speech recognition | Yes. WebGPU. Own runner on onnxruntime-web (`src/backends/browser/qwen3-asr/`), because Transformers.js cannot run this model | Yes. `llama-server` | 1.72 GB | 30 according to the model card, detects the language itself | Browser: 2.5 s per segment. de 13%, es 0.9%, ru 0%, zh 7%, ja 84%. `llama-server` gives the same errors (0.45 s per segment). Bridge: the exchange was checked over stdio |
+| Cohere Transcribe 2B | Speech recognition | Yes. WebGPU, `q4f16` | No | 1.54 GB | 14, **no Russian**; the language must be chosen | 1.2 s per segment, the fastest in the browser. de 7%, es 0.3%, zh 7%, ja 30% |
+| PLaMo 3 Translate 0.8B | Translation | Yes. WebGPU, `q4f16` | No | 708 MB | Translation into English and Russian | 1.9 s per phrase. Phrases are translated one by one, without context |
+| PLaMo 3 Translate 2B | Translation | No | Yes. `llama-server` | not measured | Translation into English and Russian | Computer: works, with the two previous phrases as context |
 
-Замер: Windows 11, Brave 157 с WebGPU, 48 сегментов по 1,5-10 с (в среднем 4,7 с) из реальных роликов с эталонными субтитрами (de, es, ja, zh, по 10 штук) и 8 русских фраз, озвученных Silero. Это малая выборка. Цифры показывают порядок, а не точную оценку. Ошибки по японскому высокие у всех моделей, возможно, из-за различий в записи эталона (кандзи и кана). Время включает передачу звука в воркер, загрузка моделей в него не входит. Ошибки символов в процентах (меньше лучше). Cohere всегда шёл с выбранным языком, Whisper и Qwen3-ASR в первых трёх таблицах с автоопределением, если не сказано иное. Пустая клетка значит "не проверял" или "модель не поддерживает язык".
+Measurement: Windows 11, Brave 157 with WebGPU, 48 segments of 1.5-10 s (4.7 s on average) from real videos with reference subtitles (de, es, ja, zh, 10 each) and 8 Russian phrases voiced by Silero. The sample is small. The numbers show the order of magnitude, not a precise estimate. Japanese errors are high for all models, possibly because the reference is written differently (kanji and kana). Time includes sending audio to the worker, but not loading the models into it. Character errors are in percent (lower is better). Cohere always ran with a chosen language. Whisper and Qwen3-ASR ran with auto-detection in the first three tables unless stated otherwise. An empty cell means "not checked" or "the model does not support the language".
 
-**Чистая речь**
+**Clean speech**
 
-| Язык | Whisper small | Qwen3-ASR | Cohere |
+| Language | Whisper small | Qwen3-ASR | Cohere |
 |---|---|---|---|
 | de | 9 | 13 | 7 |
-| es | 0,3 | 0,9 | 0,3 |
+| es | 0.3 | 0.9 | 0.3 |
 | ru | 0 | 0 | |
 | zh | 46 | 7 | 7 |
 | ja | 61 | 84 | 30 |
-| ko | 4 | 6 | 4,5 |
+| ko | 4 | 6 | 4.5 |
 | nl | 5 | 6 | 2 |
-| ar | 5 | 5 | 0,4 |
+| ar | 5 | 5 | 0.4 |
 
-**Белый шум, 5 дБ**
+**White noise, 5 dB**
 
-| Язык | Whisper small | Qwen3-ASR | Cohere |
+| Language | Whisper small | Qwen3-ASR | Cohere |
 |---|---|---|---|
 | de | 23 | 16 | 9 |
-| es | 2 | 0,6 | 0,3 |
+| es | 2 | 0.6 | 0.3 |
 | ru | 6 | 7 | |
 | zh | 47 | 16 | 18 |
 | ja | 69 | 84 | 34 |
 
-**Чужая русская речь на фоне, 5 дБ**
+**Someone else's Russian speech in the background, 5 dB**
 
-| Язык | Whisper (авто) | Whisper (язык выбран) | Qwen3-ASR (авто) | Qwen3-ASR (язык выбран) | Cohere |
+| Language | Whisper (auto) | Whisper (language chosen) | Qwen3-ASR (auto) | Qwen3-ASR (language chosen) | Cohere |
 |---|---|---|---|---|---|
 | de | 15 | 15 | 14 | 14 | 7 |
-| es | 25 | 7 | 80 | 22 | 0,3 |
+| es | 25 | 7 | 80 | 22 | 0.3 |
 | zh | 91 | 51 | 60 | 30 | 59 |
 | ja | 489 | 70 | 1223 | 601 | 73 |
 
-Выводы: при посторонних голосах автоопределение языка путается, язык лучше выбирать вручную. Cohere устойчивее остальных на европейских языках, но на китайском и японском с фоном теряет точность. Qwen3-ASR на японском с чужой речью выдаёт бессмыслицу. Французский, итальянский, португальский, польский, вьетнамский, турецкий и украинский не проверены: сервер FLEURS не отдал записи. Музыку на фоне не проверял.
+Conclusions: with extra voices in the background, language auto-detection gets confused, so choose the language by hand. Cohere is the most stable on European languages, but loses accuracy on Chinese and Japanese with background speech. Qwen3-ASR produces nonsense on Japanese with background speech. French, Italian, Portuguese, Polish, Vietnamese, Turkish and Ukrainian were not checked: the FLEURS server returned no recordings. Background music was not checked.
 
-Загрузка из кэша в память видеокарты: Whisper 13 с, Cohere 21 с, Qwen3-ASR около 50 с.
+Loading from the cache into GPU memory: Whisper 13 s, Cohere 21 s, Qwen3-ASR about 50 s.
 
-Что выбрать:
+What to choose:
 
-| Задача | Модель | Почему |
+| Task | Model | Why |
 |---|---|---|
-| Русская речь | Qwen3-ASR | У Cohere нет русского. Whisper и Qwen3-ASR дали 0% ошибок на чистых русских фразах, но фразы были синтезированные |
-| Китайский | Cohere или Qwen3-ASR (7% у обеих) | Whisper выдаёт традиционные иероглифы, ошибки 46% |
-| Японский | Cohere (30%) | У Qwen3-ASR 84% и у Whisper 59%, возможно, из-за записи эталона |
-| Немецкий, испанский | Cohere (7% и 0,3%) | Самая быстрая (1,2 с на сегмент). Whisper почти так же точна, но медленнее |
-| Малый объём загрузки, нет WebGPU | Whisper small | 589 МБ, работает на WASM, но медленно |
-| Язык заранее неизвестен | Qwen3-ASR или Whisper | Cohere требует выбрать язык |
+| Russian speech | Qwen3-ASR | Cohere has no Russian. Whisper and Qwen3-ASR gave 0% errors on clean Russian phrases, but the phrases were synthesized |
+| Chinese | Cohere or Qwen3-ASR (7% for both) | Whisper outputs traditional characters, 46% errors |
+| Japanese | Cohere (30%) | Qwen3-ASR has 84% and Whisper 59%, possibly because of how the reference is written |
+| German, Spanish | Cohere (7% and 0.3%) | The fastest (1.2 s per segment). Whisper is almost as accurate, but slower |
+| Small download, no WebGPU | Whisper small | 589 MB, runs on WASM, but slowly |
+| Language not known in advance | Qwen3-ASR or Whisper | Cohere needs the language chosen |
 
-Почему Qwen3-ASR медленнее в браузере (2,5 с) чем в `llama-server` (0,45 с): на каждый токен декодер запускается заново, это сотни мелких вызовов видеокарты, и результат каждый раз возвращается на процессор. Оба эффекта описаны в исследованиях WebGPU ([Characterizing WebGPU Dispatch Overhead for LLM Inference](https://arxiv.org/html/2604.02344)). Кэш внимания на процессоре давал ещё больше потерь: перенос его в видеопамять ускорил модель в 2,7 раза (6,8 с до 2,5 с). Ускорить дальше можно, но нужен профиль по шагам.
+Why Qwen3-ASR is slower in the browser (2.5 s) than in `llama-server` (0.45 s): for every token the decoder is launched again, which means hundreds of small GPU calls, and the result is returned to the CPU each time. Both effects are described in WebGPU research ([Characterizing WebGPU Dispatch Overhead for LLM Inference](https://arxiv.org/html/2604.02344)). The attention cache on the CPU cost even more: moving it to GPU memory made the model 2.7 times faster (6.8 s down to 2.5 s). It can be made faster still, but that needs a step-by-step profile.
 
-Как это работает в режиме "Браузер":
+How "Browser" mode works:
 
-- Модели не скачиваются сами. На странице настроек у каждой модели есть кнопка "Скачать". Во время скачивания видно проценты, объём и скорость. Есть кнопка "Отмена": скачанные части остаются, повторное нажатие продолжает с этого места.
-- Файлы лежат в Cache API расширения и после скачивания работают без сети. Кнопка "Удалить" освобождает место.
-- Источник по умолчанию: Hugging Face. В настройках можно указать зеркало.
-- Если выбранная модель не скачана, кнопка запуска в popup покажет, что скачать в настройках.
-- Cohere и PLaMo требуют WebGPU. Страница настроек предупреждает, если его нет.
-- Первый запуск после выбора модели медленный: модель загружается в память видеокарты (13-50 с, см. замер ниже).
+- Models are not downloaded automatically. On the settings page each model has a "Download" button. During the download you see the percentage, size and speed. There is a "Cancel" button: the downloaded parts stay, and pressing "Download" again continues from there.
+- Files live in the extension's Cache API and work without a network after the download. The "Remove" button frees the space.
+- The default source is Hugging Face. You can set a mirror in the settings.
+- If the selected model is not downloaded, the start button in the popup says what to download in the settings.
+- Cohere and PLaMo need WebGPU. The settings page warns if it is missing.
+- The first start after choosing a model is slow: the model is loaded into GPU memory (13-50 s, see the measurement above).
 
-## Интерфейс
+## Interface
 
-- Popup: кнопка запуска, статус, выбор места распознавания и переключатель "Subtitles" / "Subtitles + translation". В первом режиме показывается распознанный текст на языке звука и модель перевода не запускается и не скачивается. Во втором текст переводится на любой из 52 языков PLaMo 3 Translate (список языков в карточке модели). Страница настроек: прозрачность фона, размер текста, сброс положения. Светлая и тёмная темы по настройке системы.
-- Полупрозрачные субтитры. Их можно перетаскивать и менять размер за правый нижний угол прямо на странице. Пока курсор на субтитрах, они не пропадают.
-- Picture-in-Picture: кнопка в правом верхнем углу субтитров открывает отдельное окно, которое остаётся поверх других окон. Использует Document Picture-in-Picture API (Chromium 116 и новее). Окно показывает только субтитры: само видео оно не переносит.
+- Popup: the start button, the status, the choice of where recognition runs and a switch "Subtitles" / "Subtitles + translation". In the first mode the recognized text is shown in the language of the audio, and the translation model is neither started nor downloaded. In the second mode the text is translated into any of the 52 languages of PLaMo 3 Translate (the list is on the model card). Settings page: background opacity, text size, position reset. Light and dark themes follow the system setting.
+- Semi-transparent subtitles. You can drag them and resize them by the lower right corner right on the page. While the cursor is over the subtitles, they do not disappear.
+- Picture-in-Picture: the button in the upper right corner of the subtitles opens a separate window that stays above other windows. It uses the Document Picture-in-Picture API (Chromium 116 and newer). The window shows only the subtitles: it does not move the video itself.
 
-## Нарезка аудио
+## Audio slicing
 
-Параметры в [src/core/subtitle-stream.ts](src/core/subtitle-stream.ts) (`TUNED`) подобраны на реальных роликах (zh, ja, es, de) с эталонными субтитрами:
+The parameters in [src/core/subtitle-stream.ts](src/core/subtitle-stream.ts) (`TUNED`) were tuned on real videos (zh, ja, es, de) with reference subtitles:
 
-- блоки по 250 мс, порог громкости 0.003;
-- конец фразы после 400 мс тишины, мягкий разрез по паузе 250 мс после 3 с, жёсткий разрез на 6 с;
-- сегменты с речью короче 300 мс отбрасываются;
-- в очереди перевода не больше 3 сегментов, старые отбрасываются.
+- blocks of 250 ms, loudness threshold 0.003;
+- the end of a phrase after 400 ms of silence, a soft cut at a 250 ms pause after 3 s, a hard cut at 6 s;
+- segments with speech shorter than 300 ms are dropped;
+- the translation queue holds at most 3 segments, older ones are dropped.
 
-## Программа на компьютере (Python, `companion/`)
+## Program on your computer (Python, `companion/`)
 
-Только стандартная библиотека Python. Запуск из папки `companion`:
+Python standard library only. Run it from the `companion` folder:
 
 ```powershell
-python -m ai_subtitles_companion config --models-dir C:\путь\к\моделям   # один раз
-python -m ai_subtitles_companion serve        # запустить llama-server для ASR (:8083) и перевода (:8082)
+python -m ai_subtitles_companion config --models-dir C:\path\to\models   # once
+python -m ai_subtitles_companion serve        # start llama-server for ASR (:8083) and translation (:8082)
 python -m ai_subtitles_companion status
 python -m ai_subtitles_companion stop
 ```
 
-**Скачивание.** Команда `download` (в собранной программе: `subtitles-companion download`) качает всё, что нужно, около 2,9 ГБ:
+**Downloading.** The `download` command (in the packaged program: `subtitles-companion download`) fetches everything needed, about 2.9 GB:
 
-| Что | Откуда | Размер |
+| What | From | Size |
 |---|---|---|
-| `llama-server` (llama.cpp `b12728`; Vulkan для Windows и Linux, Metal для macOS) | GitHub Releases ggml-org/llama.cpp | 17-39 МБ |
-| `Qwen3-ASR-0.6B-Q8_0.gguf`, `mmproj-Qwen3-ASR-0.6B-Q8_0.gguf` | Hugging Face ggml-org/Qwen3-ASR-0.6B-GGUF | 805 и 214 МБ |
-| `plamo-3-translate-2b-Q4_K_M.gguf` | Hugging Face pfnet/plamo-3-translate-2b-GGUF (лицензия PLaMo Community License) | 1,8 ГБ |
+| `llama-server` (llama.cpp `b12728`; Vulkan for Windows and Linux, Metal for macOS) | GitHub Releases of ggml-org/llama.cpp | 17-39 MB |
+| `Qwen3-ASR-0.6B-Q8_0.gguf`, `mmproj-Qwen3-ASR-0.6B-Q8_0.gguf` | Hugging Face ggml-org/Qwen3-ASR-0.6B-GGUF | 805 and 214 MB |
+| `plamo-3-translate-2b-Q4_K_M.gguf` | Hugging Face pfnet/plamo-3-translate-2b-GGUF (PLaMo Community License) | 1.8 GB |
 
-`llama-server` попадает в папку данных, модели в `models_dir` (по умолчанию `<папка данных>\models`). Размер и SHA-256 каждого файла зашиты в программу и проверяются, прерванная загрузка продолжается с места остановки, уже скачанное пропускается. `--only server`, `--only asr`, `--only translate` качают часть. Установка моста сама предлагает скачать недостающее (`--download` соглашается заранее, `--no-download` отказывается). Команда `check` показывает, чего не хватает.
+`llama-server` goes into the data folder, the models into `models_dir` (by default `<data folder>\models`). The size and SHA-256 of every file are built into the program and checked. An interrupted download continues from where it stopped, and files already there are skipped. `--only server`, `--only asr` and `--only translate` download one part. Installing the bridge offers to download what is missing (`--download` agrees in advance, `--no-download` declines). The `check` command shows what is missing.
 
-Файлы моделей: имена меняются в `config.json`. `llama-server` ищется в `llama_server` из настроек, в переменной `LLAMA_SERVER`, среди скачанных, в `PATH`, затем среди сборок LM Studio (Vulkan).
+Model file names can be changed in `config.json`. `llama-server` is searched for in `llama_server` from the settings, in the `LLAMA_SERVER` variable, among the downloaded builds, in `PATH`, and then among the LM Studio builds (Vulkan).
 
-**Режим "HTTP".** Расширение ходит на `127.0.0.1:8083` и `:8082`. Серверы должны быть запущены (`serve`).
+**"Computer" (HTTP) mode.** The extension calls `127.0.0.1:8083` and `:8082`. The servers must be running (`serve`).
 
-### Мост: когда он нужен и как поставить
+### The bridge: when it is needed and how to install it
 
-**Зачем.** Режим "HTTP" требует, чтобы браузер мог открыть `http://127.0.0.1:8083`. Иногда это невозможно:
+**Why.** "Computer" mode needs the browser to be able to open `http://127.0.0.1:8083`. Sometimes that is impossible:
 
-- браузерные расширения VPN или прокси направляют весь трафик браузера наружу, и запросы к `127.0.0.1` до компьютера не доходят;
-- в окнах Tor в Brave доступ к localhost заблокирован;
-- корпоративные политики и строгие настройки сети запрещают запросы на локальные адреса.
+- VPN or proxy browser extensions send all browser traffic out, and requests to `127.0.0.1` never reach your computer;
+- in Tor windows in Brave, access to localhost is blocked;
+- corporate policies and strict network settings forbid requests to local addresses.
 
-Мост обходит сеть. Браузер сам запускает программу и общается с ней через канал ввода-вывода (Native Messaging). Сетевых запросов нет, поэтому VPN и прокси не мешают. Программа сама запускает серверы моделей при первом обращении.
+The bridge goes around the network. The browser starts the program itself and talks to it through an input-output channel (Native Messaging). There are no network requests, so VPN and proxies do not interfere. The program starts the model servers itself on the first request.
 
-**Как поставить из релиза.** Скачайте с вкладки Releases файл `subtitles-companion-<система>` (Windows, Linux или macOS) и запустите его двойным щелчком. Python не нужен. Программа спросит, для каких браузеров поставить, скопирует себя в папку данных и зарегистрирует мост. Права администратора не нужны. Команды `check` и `uninstall` работают так же, как ниже: `subtitles-companion check`.
+**Install from a release.** Download the file `subtitles-companion-<system>` (Windows, Linux or macOS) from the Releases tab and double-click it. Python is not needed. The program asks which browsers to install for, copies itself into the data folder and registers the bridge. Administrator rights are not needed. The `check` and `uninstall` commands work as shown below: `subtitles-companion check`.
 
-**Как поставить из исходников.** Нужен Python 3.10 или новее. Работает в Windows, macOS и Linux.
+**Install from source.** Python 3.10 or newer is needed. Works on Windows, macOS and Linux.
 
-Windows: дважды щёлкните `companion\install-bridge.cmd` или выполните его из PowerShell по полному пути.
-macOS и Linux: `sh companion/install-bridge.sh`.
+Windows: double-click `companion\install-bridge.cmd` or run it from PowerShell by its full path.
+macOS and Linux: `sh companion/install-bridge.sh`.
 
 ```
-install-bridge     # показать найденные браузеры, дать выбрать, спросить подтверждение и поставить
-install-bridge check        # проверить регистрацию и серверы
-install-bridge uninstall    # удалить
+install-bridge     # show the browsers found, let you choose, ask for confirmation and install
+install-bridge check        # check the registration and the servers
+install-bridge uninstall    # remove
 ```
 
-Скрипт находит установленные Chrome, Chromium, Brave и Edge и предлагает выбрать, для каких ставить: номера через запятую, Enter для всех, `q` для отмены. Ключ `--browser brave` задаёт браузер сразу, `--yes` убирает вопросы.
+The script finds the installed Chrome, Chromium, Brave and Edge and offers to choose which ones to install for: numbers separated by commas, Enter for all, `q` to cancel. The `--browser brave` option sets the browser at once, `--yes` removes the questions.
 
-Куда пишется регистрация:
+Where the registration is written:
 
-| Система | Что создаётся |
+| System | What is created |
 |---|---|
-| Windows | по одному ключу реестра на браузер в `HKEY_CURRENT_USER\Software\...\NativeMessagingHosts`, манифест и `host.bat` в `%LOCALAPPDATA%\ai-realtime-subtitles`. Brave на Windows читает ключ Chrome и игнорирует свой, поэтому для Brave программа пишет оба ключа |
-| macOS | манифест в `~/Library/Application Support/<браузер>/NativeMessagingHosts`, `host.sh` в `~/Library/Application Support/ai-realtime-subtitles` |
-| Linux | манифест в `~/.config/<браузер>/NativeMessagingHosts`, `host.sh` в `~/.config/ai-realtime-subtitles` |
+| Windows | one registry key per browser under `HKEY_CURRENT_USER\Software\...\NativeMessagingHosts`, the manifest and `host.bat` in `%LOCALAPPDATA%\ai-realtime-subtitles`. Brave on Windows reads the Chrome key and ignores its own, so for Brave the program writes both keys |
+| macOS | the manifest in `~/Library/Application Support/<browser>/NativeMessagingHosts`, `host.sh` in `~/Library/Application Support/ai-realtime-subtitles` |
+| Linux | the manifest in `~/.config/<browser>/NativeMessagingHosts`, `host.sh` in `~/.config/ai-realtime-subtitles` |
 
-Браузеры из Snap и Flatpak на Linux используют другие папки профиля, и стандартная регистрация для них не подходит. Для них путь надо задать вручную.
+Browsers from Snap and Flatpak on Linux use other profile folders, so the standard registration does not fit them. For them the path must be set by hand.
 
-Использовать мост может только расширение с ID `fdpmchjhigcggmmcilchcakdnocflcbf` (закреплён ключом в `public/manifest.json`). Мост принимает только фиксированные цели (`asr`, `translate`, `companion`) и пути, произвольные адреса запрещены.
+Only the extension with ID `fdpmchjhigcggmmcilchcakdnocflcbf` (pinned by the key in `public/manifest.json`) can use the bridge. The bridge accepts only fixed targets (`asr`, `translate`, `companion`) and paths. Arbitrary addresses are forbidden.
 
-После установки перезапустите браузер и выберите в popup расширения режим "Program via bridge".
+After the installation restart the browser and choose "Bridge" in the extension popup.
 
-Поиск `llama-server` на других системах: `llama_server` в настройках, переменная `LLAMA_SERVER`, `PATH` (на macOS подойдёт `brew install llama.cpp`), затем сборки LM Studio для этой системы.
+Finding `llama-server` on other systems: `llama_server` in the settings, the `LLAMA_SERVER` variable, `PATH` (on macOS `brew install llama.cpp` works), then the LM Studio builds for that system.
 
-## Проверка в отдельном браузере
+## Testing in a separate browser
 
-`e2e/drive.mjs` и `e2e/models.mjs` (в git не входят) запускает отдельный экземпляр Brave с временным профилем, загружает `dist`, подставляет вместо звука вкладки тестовый файл как микрофон и проверяет статусы, текст субтитров, перетаскивание и изменение размера. `models.mjs` поднимает локальное зеркало моделей, нажимает "Скачать" на странице настроек, снимает проценты и запускает субтитры в режиме "Браузер". Захват звука вкладки (`tabCapture`) требует клика по значку расширения: для него есть режим `MANUAL=1 node e2e/drive.mjs`, в нём тест запускает Brave без подмены устройств, а вы нажимаете "Start subtitles".
+`e2e/drive.mjs` and `e2e/models.mjs` (not part of git) start a separate Brave instance with a temporary profile, load `dist`, replace the tab audio with a test file played as a microphone, and check the statuses, the subtitle text, dragging and resizing. `models.mjs` starts a local mirror of the models, presses "Download" on the settings page, records the percentages and starts subtitles in "Browser" mode. Tab audio capture (`tabCapture`) requires a click on the extension icon, so there is a mode `MANUAL=1 node e2e/drive.mjs`: the test starts Brave without device substitution and you press "Start subtitles".
 
-## Релиз
+## Release
 
-Версия задаётся в трёх местах: `package.json`, `public/manifest.json`, `companion/pyproject.toml`. Скрипт упаковки проверяет, что они совпадают.
+The version is set in three places: `package.json`, `public/manifest.json` and `companion/pyproject.toml`. The packaging script checks that they match.
 
-1. Поднять версию во всех трёх файлах и закоммитить.
-2. Поставить тег `vX.Y.Z` и отправить его: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. GitHub Actions (`.github/workflows/release.yml`) прогонит проверки, соберёт ZIP расширения и программу для Windows, Linux и macOS и выложит всё в Releases.
+1. Raise the version in all three files and commit.
+2. Create the tag `vX.Y.Z` and push it: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. GitHub Actions (`.github/workflows/release.yml`) runs the checks, builds the extension ZIP and the program for Windows, Linux and macOS, and publishes everything to Releases.
 
-Локально ZIP расширения собирается командой `pnpm package` (результат в `release/`).
+Locally the extension ZIP is built with `pnpm package` (the result is in `release/`).
 
-**Установка расширения из ZIP.** Распакуйте архив в постоянную папку, откройте `chrome://extensions`, включите режим разработчика, нажмите "Загрузить распакованное" и выберите папку. ID расширения остаётся `fdpmchjhigcggmmcilchcakdnocflcbf` (закреплён ключом в манифесте), поэтому мост его принимает.
-
-## Разработка
+## Development
 
 ```powershell
 pnpm install
@@ -190,12 +201,13 @@ pnpm test
 pnpm run test:companion
 ```
 
-## Состояние
+## Status
 
-Готово: нарезка `SubtitleStream` с тестами, интерфейс `Backend`, режимы "Браузер" (Whisper, Qwen3-ASR, Cohere, PLaMo 0.8B), "Компьютер" и "Мост", программа на Python, оверлей, дизайн окон, Picture-in-Picture.
+Done: `SubtitleStream` slicing with tests, the `Backend` interface, the "Browser" mode (Whisper, Qwen3-ASR, Cohere, PLaMo 0.8B), the "Computer" and "Bridge" modes, the Python program, the overlay, window design, Picture-in-Picture, the release workflow.
 
-Не готово:
+Not done:
 
-- Выборка замера мала (8-10 сегментов на язык). Языки вне de, es, ja, zh, ru не пробовал: нет записей с эталоном.
-- Qwen3-ASR в браузере в 5 раз медленнее `llama-server`: кэш внимания уже держится в видеопамяти. Перенос эмбеддингов на GPU пробовал, стало медленнее (3,5 с против 2,5 с), поэтому они остались на WASM.
-- `tabCapture` (звук вкладки) в автоматической проверке не запускался: проверка шла через тестовый микрофон.
+- The measurement sample is small (8-10 segments per language). Languages other than de, es, ja, zh and ru were not tried: there are no recordings with a reference.
+- Qwen3-ASR in the browser is 5 times slower than `llama-server`: the attention cache already stays in GPU memory. Moving the embeddings to the GPU was tried and made it slower (3.5 s against 2.5 s), so they stayed on WASM.
+- `tabCapture` (tab audio) was not run in the automatic check: the check used a test microphone.
+- The packaged program was built and started on Windows, Linux and macOS (arm64) only in CI. Installing the bridge from it was checked on Windows only.
