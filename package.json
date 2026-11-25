@@ -6,9 +6,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:companion": "python -m unittest discover -s companion/tests -t companion",
+    "test:companion": "cd companion && python -m unittest discover -s tests",
     "smoke:llama": "tsx scripts/smoke/llama.ts",
-    "build": "vite build && vite build -c vite.content.config.ts && node scripts/copy-ort.mjs"
+    "build": "vite build && vite build -c vite.content.config.ts && node scripts/copy-ort.mjs",
+    "package": "pnpm build && python scripts/package_extension.py"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.300",

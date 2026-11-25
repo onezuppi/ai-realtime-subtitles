@@ -1,4 +1,5 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,7 +7,7 @@ from unittest import mock
 
 import ai_subtitles_companion
 from ai_subtitles_companion import HOST_NAME, install
-from ai_subtitles_companion.install import launcher
+from ai_subtitles_companion.install import launcher, windows
 
 IDS = ["abcdefghijklmnopabcdefghijklmnop"]
 
@@ -87,6 +88,21 @@ class LauncherTest(unittest.TestCase):
         self.assertIn(f'cd /d "{package_parent}"', bat)
         self.assertIn(f'cd "{launcher._sh_quoted(package_parent)}" || exit 1', sh)
 
+    def test_packaged_build_launcher_runs_the_program_directly(self):
+        with tempfile.TemporaryDirectory() as root:
+            download = Path(root) / "download" / "companion.exe"
+            download.parent.mkdir()
+            download.write_bytes(b"program")
+            data = Path(root) / "data"
+            data.mkdir()
+            with mock.patch.object(sys, "frozen", True, create=True), mock.patch.object(sys, "executable", str(download)):
+                bat = install.write_launcher("win32", data).read_bytes().decode()
+                sh = install.write_launcher("linux", data).read_bytes().decode()
+            kept = data / "companion.exe"
+            self.assertEqual(kept.read_bytes(), b"program")
+            self.assertEqual(bat, f'@echo off\r\n"{kept}" bridge\r\n')
+            self.assertEqual(sh, f'#!/bin/sh\nexec "{launcher._sh_quoted(kept)}" bridge\n')
+
     def test_bat_doubles_percent_signs(self):
         text = launcher.bat_text(Path("C:/a%PATH%b"), "C:/py/python.exe")
         self.assertIn("a%%PATH%%b", text)
@@ -97,6 +113,35 @@ class LauncherTest(unittest.TestCase):
         text = launcher.sh_text('/home/a$b`c\\d"e', "/usr/bin/python3")
         self.assertIn(r'cd "/home/a\$b\`c\\d\"e" || exit 1', text)
         self.assertIn('exec "/usr/bin/python3" -m ai_subtitles_companion bridge', text)
+
+
+class WindowsRegistryTest(unittest.TestCase):
+    """Runs the Windows code path against a fake registry."""
+
+    def _install(self, browsers):
+        written = {}
+        fake = mock.MagicMock()
+        fake.HKEY_CURRENT_USER = "HKCU"
+
+        def create_key(hive, path):
+            context = mock.MagicMock()
+            context.__enter__.return_value = path
+            return context
+
+        fake.CreateKey.side_effect = create_key
+        fake.SetValueEx.side_effect = lambda path, name, reserved, kind, value: written.setdefault(path, value)
+        with tempfile.TemporaryDirectory() as folder, mock.patch.dict("sys.modules", {"winreg": fake}):
+            windows.install("{}", browsers, Path(folder))
+        return sorted(written)
+
+    def test_brave_is_also_registered_under_the_chrome_key(self):
+        self.assertEqual(self._install(["brave"]), sorted([
+            rf"Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\{HOST_NAME}",
+            rf"Software\Google\Chrome\NativeMessagingHosts\{HOST_NAME}",
+        ]))
+
+    def test_other_browsers_get_only_their_own_key(self):
+        self.assertEqual(self._install(["edge"]), [rf"Software\Microsoft\Edge\NativeMessagingHosts\{HOST_NAME}"])
 
 
 class BrowserNamesTest(unittest.TestCase):

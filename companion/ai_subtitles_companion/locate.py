@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .config import Config
+from .download import downloaded_llama_server
 from .errors import SetupError
 
 LM_STUDIO_BACKENDS = Path.home() / ".lmstudio" / "extensions" / "backends"
@@ -26,6 +27,9 @@ def find_llama_server(config: Config) -> Path:
             if not path.exists():
                 raise SetupError(f"llama-server not found: {path}")
             return path
+    downloaded = downloaded_llama_server()
+    if downloaded:
+        return downloaded
     on_path = shutil.which("llama-server")
     if on_path:  # for example `brew install llama.cpp` on macOS
         return Path(on_path)
@@ -38,4 +42,4 @@ def find_llama_server(config: Config) -> Path:
                 found.append((tuple(int(part) for part in match.groups()), folder / exe))
         if found:
             return max(found)[1]
-    raise SetupError("llama-server not found. Set llama_server in config.json, set LLAMA_SERVER, or add it to PATH.")
+    raise SetupError("llama-server not found. Run the `download` command, set llama_server in config.json, set LLAMA_SERVER, or add it to PATH.")

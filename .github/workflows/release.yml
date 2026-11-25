@@ -1,0 +1,81 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: python scripts/package_extension.py ${{ startsWith(github.ref, 'refs/tags/') && format('--tag {0}', github.ref_name) || '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: release/*.zip
+
+  companion:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64 }
+          - { os: ubuntu-latest, name: linux-x64 }
+          - { os: macos-latest, name: macos-arm64 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: companion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s tests
+      - run: python -m pip install pyinstaller
+      - run: python -m pyinstaller --onefile --name subtitles-companion entry.py
+      - name: Smoke test the packaged program
+        shell: bash
+        run: ./dist/subtitles-companion* status
+      - name: Name the file after the system
+        shell: bash
+        run: |
+          mkdir -p out
+          for f in dist/subtitles-companion*; do
+            ext="${f##*subtitles-companion}"
+            cp "$f" "out/subtitles-companion-${{ matrix.name }}${ext}"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-${{ matrix.name }}
+          path: companion/out/*
+
+  publish:
+    needs: [extension, companion]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true

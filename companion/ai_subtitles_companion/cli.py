@@ -1,8 +1,9 @@
-"""Commands: serve, bridge, install, uninstall, stop, status, check, config.
+"""Commands: serve, bridge, install, uninstall, stop, status, check, config, download.
 
   python -m ai_subtitles_companion serve      start the model servers and keep running (Ctrl+C stops them)
   python -m ai_subtitles_companion bridge     native messaging host (the browser starts this itself)
   python -m ai_subtitles_companion install    register the host for Chrome, Brave and Edge
+  python -m ai_subtitles_companion download   fetch llama-server and the model files (about 2.9 GB)
   python -m ai_subtitles_companion config     show the settings file and set values: --models-dir PATH
 """
 from __future__ import annotations
@@ -13,9 +14,10 @@ import sys
 import time
 from typing import Callable
 
-from . import bridge, config as cfg, install as installer, servers
+from . import bridge, config as cfg, download, install as installer, servers
 from .cli_install import add_arguments as add_install_arguments, cmd_install
 from .errors import SetupError
+from .locate import find_llama_server
 
 CONFIG_FIELDS = ("models_dir", "mt_model", "llama_server")
 
@@ -54,6 +56,17 @@ def cmd_status(args: argparse.Namespace, config: cfg.Config) -> int:
 def cmd_check(args: argparse.Namespace, config: cfg.Config) -> int:
     print("registered for:", ", ".join(installer.registered_browsers()) or "no browser")
     print("servers:", _server_state(config))
+    try:
+        print("llama-server:", find_llama_server(config))
+    except SetupError as error:
+        print("llama-server: missing -", error)
+    missing = download.missing_models(config)
+    print("models:", f"missing {', '.join(missing)}" if missing else f"all there ({config.models_path})")
+    return 0
+
+
+def cmd_download(args: argparse.Namespace, config: cfg.Config) -> int:
+    download.run(config, args.only)
     return 0
 
 
@@ -82,16 +95,20 @@ COMMANDS: dict[str, Callable[[argparse.Namespace, cfg.Config], int]] = {
     "check": cmd_check,
     "uninstall": cmd_uninstall,
     "config": cmd_config,
+    "download": cmd_download,
 }
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai_subtitles_companion")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
     for name in COMMANDS:
         command = sub.add_parser(name)
         if name == "install":
             add_install_arguments(command)
+        elif name == "download":
+            command.add_argument("--only", action="append", choices=download.PARTS,
+                                 help="download only this part (repeatable). Default: all")
         elif name == "config":
             for field in CONFIG_FIELDS:
                 command.add_argument("--" + field.replace("_", "-"))
@@ -100,6 +117,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command is None:
+        # Started without a command, for example by a double click on the packaged program: install.
+        args = build_parser().parse_args(["install"])
+        if getattr(sys, "frozen", False):
+            code = _run(args)
+            input("Press Enter to close this window.")
+            return code
+    return _run(args)
+
+
+def _run(args: argparse.Namespace) -> int:
     try:
         config = cfg.load()
     except SetupError as error:

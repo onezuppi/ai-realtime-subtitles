@@ -4,6 +4,8 @@
 
 Код написан с нуля на TypeScript. Расширение `subtitle-anything-local` служит только референсом.
 
+![Субтитры поверх видео](docs/example.webp)
+
 ## Режимы работы
 
 1. **Только браузер.** Модели работают в браузере (WebGPU и WASM). Установка программ не нужна.
@@ -108,7 +110,17 @@ python -m ai_subtitles_companion status
 python -m ai_subtitles_companion stop
 ```
 
-Файлы моделей: `Qwen3-ASR-0.6B-Q8_0.gguf`, `mmproj-Qwen3-ASR-0.6B-Q8_0.gguf`, `plamo-3-translate-2b-Q4_K_M.gguf` (имена меняются в `config.json`). `llama-server` ищется в `llama_server` из настроек, в переменной `LLAMA_SERVER`, в `PATH`, затем среди сборок LM Studio (Vulkan).
+**Скачивание.** Команда `download` (в собранной программе: `subtitles-companion download`) качает всё, что нужно, около 2,9 ГБ:
+
+| Что | Откуда | Размер |
+|---|---|---|
+| `llama-server` (llama.cpp `b12728`; Vulkan для Windows и Linux, Metal для macOS) | GitHub Releases ggml-org/llama.cpp | 17-39 МБ |
+| `Qwen3-ASR-0.6B-Q8_0.gguf`, `mmproj-Qwen3-ASR-0.6B-Q8_0.gguf` | Hugging Face ggml-org/Qwen3-ASR-0.6B-GGUF | 805 и 214 МБ |
+| `plamo-3-translate-2b-Q4_K_M.gguf` | Hugging Face pfnet/plamo-3-translate-2b-GGUF (лицензия PLaMo Community License) | 1,8 ГБ |
+
+`llama-server` попадает в папку данных, модели в `models_dir` (по умолчанию `<папка данных>\models`). Размер и SHA-256 каждого файла зашиты в программу и проверяются, прерванная загрузка продолжается с места остановки, уже скачанное пропускается. `--only server`, `--only asr`, `--only translate` качают часть. Установка моста сама предлагает скачать недостающее (`--download` соглашается заранее, `--no-download` отказывается). Команда `check` показывает, чего не хватает.
+
+Файлы моделей: имена меняются в `config.json`. `llama-server` ищется в `llama_server` из настроек, в переменной `LLAMA_SERVER`, среди скачанных, в `PATH`, затем среди сборок LM Studio (Vulkan).
 
 **Режим "HTTP".** Расширение ходит на `127.0.0.1:8083` и `:8082`. Серверы должны быть запущены (`serve`).
 
@@ -122,7 +134,9 @@ python -m ai_subtitles_companion stop
 
 Мост обходит сеть. Браузер сам запускает программу и общается с ней через канал ввода-вывода (Native Messaging). Сетевых запросов нет, поэтому VPN и прокси не мешают. Программа сама запускает серверы моделей при первом обращении.
 
-**Как поставить.** Нужен Python 3.10 или новее. Работает в Windows, macOS и Linux. Права администратора не нужны.
+**Как поставить из релиза.** Скачайте с вкладки Releases файл `subtitles-companion-<система>` (Windows, Linux или macOS) и запустите его двойным щелчком. Python не нужен. Программа спросит, для каких браузеров поставить, скопирует себя в папку данных и зарегистрирует мост. Права администратора не нужны. Команды `check` и `uninstall` работают так же, как ниже: `subtitles-companion check`.
+
+**Как поставить из исходников.** Нужен Python 3.10 или новее. Работает в Windows, macOS и Linux.
 
 Windows: дважды щёлкните `companion\install-bridge.cmd` или выполните его из PowerShell по полному пути.
 macOS и Linux: `sh companion/install-bridge.sh`.
@@ -139,7 +153,7 @@ install-bridge uninstall    # удалить
 
 | Система | Что создаётся |
 |---|---|
-| Windows | по одному ключу реестра на браузер в `HKEY_CURRENT_USER\Software\...\NativeMessagingHosts`, манифест и `host.bat` в `%LOCALAPPDATA%\ai-realtime-subtitles` |
+| Windows | по одному ключу реестра на браузер в `HKEY_CURRENT_USER\Software\...\NativeMessagingHosts`, манифест и `host.bat` в `%LOCALAPPDATA%\ai-realtime-subtitles`. Brave на Windows читает ключ Chrome и игнорирует свой, поэтому для Brave программа пишет оба ключа |
 | macOS | манифест в `~/Library/Application Support/<браузер>/NativeMessagingHosts`, `host.sh` в `~/Library/Application Support/ai-realtime-subtitles` |
 | Linux | манифест в `~/.config/<браузер>/NativeMessagingHosts`, `host.sh` в `~/.config/ai-realtime-subtitles` |
 
@@ -155,12 +169,25 @@ install-bridge uninstall    # удалить
 
 `e2e/drive.mjs` и `e2e/models.mjs` (в git не входят) запускает отдельный экземпляр Brave с временным профилем, загружает `dist`, подставляет вместо звука вкладки тестовый файл как микрофон и проверяет статусы, текст субтитров, перетаскивание и изменение размера. `models.mjs` поднимает локальное зеркало моделей, нажимает "Скачать" на странице настроек, снимает проценты и запускает субтитры в режиме "Браузер". Захват звука вкладки (`tabCapture`) требует клика по значку расширения: для него есть режим `MANUAL=1 node e2e/drive.mjs`, в нём тест запускает Brave без подмены устройств, а вы нажимаете "Start subtitles".
 
+## Релиз
+
+Версия задаётся в трёх местах: `package.json`, `public/manifest.json`, `companion/pyproject.toml`. Скрипт упаковки проверяет, что они совпадают.
+
+1. Поднять версию во всех трёх файлах и закоммитить.
+2. Поставить тег `vX.Y.Z` и отправить его: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. GitHub Actions (`.github/workflows/release.yml`) прогонит проверки, соберёт ZIP расширения и программу для Windows, Linux и macOS и выложит всё в Releases.
+
+Локально ZIP расширения собирается командой `pnpm package` (результат в `release/`).
+
+**Установка расширения из ZIP.** Распакуйте архив в постоянную папку, откройте `chrome://extensions`, включите режим разработчика, нажмите "Загрузить распакованное" и выберите папку. ID расширения остаётся `fdpmchjhigcggmmcilchcakdnocflcbf` (закреплён ключом в манифесте), поэтому мост его принимает.
+
 ## Разработка
 
 ```powershell
 pnpm install
 pnpm run typecheck
 pnpm test
+pnpm run test:companion
 ```
 
 ## Состояние
@@ -169,7 +196,6 @@ pnpm test
 
 Не готово:
 
-- Мост в настоящем браузере: Brave пишет "host not found" при том, что реестр и манифест выглядят правильно. Причина не найдена.
 - Выборка замера мала (8-10 сегментов на язык). Языки вне de, es, ja, zh, ru не пробовал: нет записей с эталоном.
 - Qwen3-ASR в браузере в 5 раз медленнее `llama-server`: кэш внимания уже держится в видеопамяти. Перенос эмбеддингов на GPU пробовал, стало медленнее (3,5 с против 2,5 с), поэтому они остались на WASM.
 - `tabCapture` (звук вкладки) в автоматической проверке не запускался: проверка шла через тестовый микрофон.

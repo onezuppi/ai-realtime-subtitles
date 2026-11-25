@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import install as installer
+from . import download, install as installer
 from .config import Config
+from .errors import SetupError
+from .locate import find_llama_server
 
 # Extension ID produced by the "key" in public/manifest.json. Same on every machine.
 DEFAULT_EXTENSION_ID = "fdpmchjhigcggmmcilchcakdnocflcbf"
@@ -36,6 +38,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--browser", action="append", choices=installer.browser_names(),
                         help="default: choose from the installed ones")
     parser.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument("--download", action="store_true", help="also download llama-server and the models")
+    choice.add_argument("--no-download", action="store_true", help="do not offer the download")
 
 
 def choose_browsers(found: list[str]) -> list[str]:
@@ -84,5 +89,23 @@ def cmd_install(args: argparse.Namespace, config: Config) -> int:
         return 1
     done = installer.install(ids, browsers)
     print("registered for:", ", ".join(done))
+    if _wants_download(args, config):
+        download.run(config)
     print("Restart the browser, then pick 'Program via bridge' in the extension popup.")
     return 0
+
+
+def _wants_download(args: argparse.Namespace, config: Config) -> bool:
+    """Offer the download of what is still missing. --yes alone never starts a 3 GB download."""
+    try:
+        have_server = find_llama_server(config)
+    except SetupError:
+        have_server = None
+    if have_server and not download.missing_models(config):
+        return False
+    if args.download:
+        return True
+    if args.no_download or args.yes:
+        print("llama-server or model files are missing. Run the `download` command to fetch them (about 2.9 GB).")
+        return False
+    return input("llama-server and the models are missing. Download them now, about 2.9 GB? [Y/n] ").strip().lower()         not in ("n", "no")

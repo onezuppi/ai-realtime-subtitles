@@ -13,6 +13,10 @@ WINDOWS_KEYS = {
     "edge": r"Software\Microsoft\Edge\NativeMessagingHosts",
 }
 
+# Brave on Windows reads the Chrome key and ignores its own: a host registered only under
+# BraveSoftware\Brave-Browser ends in "Specified native messaging host not found".
+ALSO_READS = {"brave": "chrome"}
+
 
 def _host_key(browser: str) -> str:
     return rf"{WINDOWS_KEYS[browser]}\{HOST_NAME}"
@@ -56,8 +60,9 @@ def install(content: str, browsers: list[str], folder: Path) -> list[str]:
     manifest_path.write_text(content, encoding="utf-8")
     done = []
     for name in browsers:
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _host_key(name)) as key:
-            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, str(manifest_path))
+        for target in dict.fromkeys([name, ALSO_READS.get(name, name)]):
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _host_key(target)) as key:
+                winreg.SetValueEx(key, "", 0, winreg.REG_SZ, str(manifest_path))
         done.append(name)
     return done
 
