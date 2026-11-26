@@ -37,7 +37,7 @@ const mirror = createServer((req, res) => {
 }).listen(MIRROR, '127.0.0.1');
 
 const pageServer = createServer((req, res) => {
-  const file = req.url === '/' ? 'page.html' : decodeURIComponent(req.url.split('?')[0].slice(1));
+  const file = decodeURIComponent(req.url.split('?')[0].slice(1)) || 'page.html';
   const path = resolve(import.meta.dirname, file);
   if (!path.startsWith(import.meta.dirname + sep)) return res.writeHead(403).end(); // stay inside e2e/
   let body; try { body = readFileSync(path); } catch { return res.writeHead(404).end(); }

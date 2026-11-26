@@ -79,6 +79,7 @@ export async function stopSession(): Promise<void> {
  * popup never shows "ON" for a tab that has no captions.
  */
 export async function reinjectOverlay(tabId: number): Promise<void> {
+  await restored; // a woken worker knows nothing until the saved status is read
   if (tabId !== status.tabId || status.state === 'off' || status.state === 'error') return;
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });

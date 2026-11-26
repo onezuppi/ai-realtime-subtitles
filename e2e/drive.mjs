@@ -23,7 +23,7 @@ const out = (name) => join(import.meta.dirname, name);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const server = createServer((req, res) => {
-  const file = req.url === '/' ? 'page.html' : decodeURIComponent(req.url.split('?')[0].slice(1));
+  const file = decodeURIComponent(req.url.split('?')[0].slice(1)) || 'page.html';
   const path = resolve(import.meta.dirname, file);
   if (!path.startsWith(import.meta.dirname + sep)) return res.writeHead(403).end(); // stay inside e2e/
   try {
@@ -151,6 +151,25 @@ try {
   await shoot('caption.png');
   note('statuses', (await popup.evaluate('window.__statuses')).map((s) => s.state).join(','));
   note('overlayHostPresent', await pageCdp.evaluate(`[...document.documentElement.children].some(e => e.style.zIndex === '2147483647')`));
+
+  if (process.env.LIFECYCLE) {
+    // Service worker restart: the status must come back from session storage while capture goes on.
+    const hasOverlay = `[...document.documentElement.children].some(e => e.style.zIndex === '2147483647')`;
+    const before = await popup.evaluate(`chrome.runtime.sendMessage({type:'popup-status'})`);
+    await swCdp.send('ServiceWorker.enable').catch(() => {});
+    await fetch(`http://127.0.0.1:${PORT}/json/close/${sw.id}`).catch(() => {});
+    await sleep(1500);
+    const after = await popup.evaluate(`chrome.runtime.sendMessage({type:'popup-status'})`);
+    note('statusBeforeRestart', before); note('statusAfterRestart', after);
+    if (!after || after.tabId !== before.tabId || after.state === 'off') throw new Error('status lost after service worker restart');
+    // Navigation of the captured tab: the overlay must be injected again.
+    await pageCdp.send('Page.navigate', { url: 'http://127.0.0.1:8765/?again=1' });
+    await sleep(2500);
+    note('statusAfterNavigation', await popup.evaluate(`chrome.runtime.sendMessage({type:'popup-status'})`));
+    const back = await pageCdp.evaluate(hasOverlay);
+    note('overlayAfterNavigation', back);
+    if (!back) throw new Error('overlay missing after navigation');
+  }
 
   // Drag the box, then resize it by the corner grip, and read the saved geometry.
   const view = await pageCdp.evaluate('({w: innerWidth, h: innerHeight})');
