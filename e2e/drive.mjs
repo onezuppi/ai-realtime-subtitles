@@ -71,7 +71,7 @@ try {
   const extId = new URL(sw.url).host;
   note('extensionId', extId);
   if (process.env.SHOTS) {
-    const shots = [['popup', 'src/popup/popup.html', 340, 520], ['options', 'src/options/options.html', 820, 900]];
+    const shots = [['popup', 'src/popup/popup.html', 340, 520], ['options', 'src/options/options.html', 820, 2600]];
     for (const [name, path, width, height] of shots) {
       const tab = attach(await (await fetch(`http://127.0.0.1:${PORT}/json/new?chrome-extension://${extId}/${path}`, { method: 'PUT' })).json());
       await tab.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: false });
@@ -87,7 +87,7 @@ try {
   }
   if (process.env.PROBE) {
     const probe = attach(sw);
-    for (const name of ['com.ai_realtime_subtitles.companion', 'com.subtitle_anything.llm', 'com.nonexistent.host']) {
+    for (const name of (process.env.PROBE_NAMES ?? 'com.ai_realtime_subtitles.companion,com.subtitle_anything.llm,com.nonexistent.host').split(',')) {
       note(`probe ${name}`, await probe.evaluate(`Promise.race([new Promise(r => setTimeout(() => r('TIMEOUT (host started, no reply)'), 6000)), new Promise(r => chrome.runtime.sendNativeMessage('${name}', {id: 1, target: 'companion', path: '/status', method: 'GET'}, resp => r(chrome.runtime.lastError ? 'ERR ' + chrome.runtime.lastError.message : JSON.stringify(resp))))])`));
     }
     throw new Error('probe done');
@@ -160,6 +160,14 @@ try {
   await sleep(500);
   await swCdp.evaluate(`chrome.tabs.query({ url: 'http://127.0.0.1:8765/*' }).then(([t]) => chrome.tabs.sendMessage(t.id, { type: 'caption', tabId: t.id, text: 'Grip test' })).then(() => 1)`);
   await sleep(300);
+  if (process.env.PIPTEST) {
+    // A page video enters the native Picture-in-Picture window: the extension must swap it for a canvas with the caption.
+    const run = async (expression) => (await pageCdp.send('Runtime.evaluate', { expression, userGesture: true, awaitPromise: true, returnByValue: true })).result?.result?.value;
+    note('pipSetup', await run(`(async () => { const c = Object.assign(document.createElement('canvas'), { width: 640, height: 360 }); const g = c.getContext('2d'); setInterval(() => { g.fillStyle = '#245'; g.fillRect(0, 0, 640, 360); g.fillStyle = '#fff'; g.fillRect(Date.now() % 600, 100, 40, 40); }, 30); const v = document.createElement('video'); v.id = 'pipsrc'; v.muted = true; v.srcObject = c.captureStream(30); document.body.append(v); await v.play(); await v.requestPictureInPicture(); return 'entered'; })().catch(e => 'ERR ' + e)`));
+    await sleep(2500);
+    note('pipError', await run('document.documentElement.dataset.pipError ?? "-"')); note('pipElement', await run(`(() => { const e = document.pictureInPictureElement; return e ? JSON.stringify({ id: e.id, w: e.videoWidth, h: e.videoHeight }) : 'none'; })()`));
+    await run(`document.exitPictureInPicture().then(() => 1, () => 0)`);
+  }
   await mouse('mousePressed', x0 + w / 2, y0 + 12);
   for (let i = 1; i <= 5; i++) await mouse('mouseMoved', x0 + w / 2 - i * 40, y0 + 12 - i * 60);
   await mouse('mouseReleased', x0 + w / 2 - 200, y0 + 12 - 300);

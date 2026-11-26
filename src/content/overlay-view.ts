@@ -4,6 +4,7 @@ import { clampBox, defaultBox, fontSizeFor, hideDelayMs, MIN_WIDTH, type Box } f
 import { startDrag } from './overlay-drag';
 import { OVERLAY_HTML } from './overlay-template';
 import { openCaptionWindow, pipSupported, type CaptionWindow } from './pip';
+import { watchVideoPip } from './video-pip';
 
 export interface OverlayView {
   applySettings(settings: Settings): void;
@@ -26,6 +27,7 @@ export function createOverlayView(initial: Box, initialSettings: Settings): Over
   let geometry = initial;
   let pipWindow: CaptionWindow | null = null;
   let lastText = '';
+  const videoPip = watchVideoPip();
   let fontScale = initialSettings.fontScale;
   box.style.setProperty('--opacity', String(initialSettings.opacity));
 
@@ -74,6 +76,7 @@ export function createOverlayView(initial: Box, initialSettings: Settings): Over
     timer = setTimeout(() => {
       box.style.display = 'none';
       pipWindow?.setText('');
+      videoPip.setText('');
     }, hideDelayMs(text.textContent));
   };
   box.addEventListener('pointerenter', () => clearTimeout(timer));
@@ -92,6 +95,7 @@ export function createOverlayView(initial: Box, initialSettings: Settings): Over
     show(value) {
       lastText = value;
       pipWindow?.setText(value);
+      videoPip.setText(value);
       text.textContent = value;
       box.style.display = value ? 'block' : 'none';
       apply();

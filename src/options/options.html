@@ -7,25 +7,31 @@
     <link rel="stylesheet" href="../ui/theme.css" />
     <style>
       body { padding: 32px 16px 64px; }
-      main { max-width: 640px; margin: 0 auto; display: grid; gap: 16px; }
-      h1 { font-size: 22px; }
-      h2 { font-size: 15px; margin-bottom: 12px; }
-      .row { display: grid; gap: 4px; margin-bottom: 14px; }
+      main { max-width: 640px; margin: 0 auto; display: grid; gap: 0; }
+      main h1 { font-size: 22px; }
+      section { padding: 28px 0; border-top: 1px solid var(--border); }
+      main h1 { margin-bottom: 24px; }
+      main h2 { font-size: 16px; margin-bottom: 16px; }
+      section > .row:last-child, section > .hint:last-child { margin-bottom: 0; }
+      .row { display: grid; gap: 6px; margin-bottom: 18px; }
       .row:last-child { margin-bottom: 0; }
       .value { float: right; font-weight: 500; color: var(--text); }
       .actions { display: flex; gap: 8px; margin-top: 14px; }
       .preview-wrap { position: relative; margin-top: 14px; height: 110px; border-radius: var(--radius-sm); overflow: hidden;
-        background: linear-gradient(135deg, #2b5876, #4e4376 55%, #c06c84); display: grid; place-items: center; }
+        background: #3a3f4b; display: grid; place-items: center; }
       .preview { padding: .45em .9em; border-radius: .5em; color: #fff; font-weight: 600; text-align: center; max-width: 86%;
         text-shadow: 0 1px 2px rgba(0, 0, 0, .8); backdrop-filter: blur(4px); }
       #saved { font-size: 12px; color: var(--ok); min-height: 1.2em; }
-      h3 { font-size: 13px; margin: 16px 0 8px; color: var(--text-2); }
-      .models { display: grid; gap: 8px; }
-      .model { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
-      .model[data-selected="true"] { border-color: var(--accent); }
+      main h3 { font-size: 13px; margin: 24px 0 6px; color: var(--text-2); font-weight: 600; }
+      .models { display: grid; }
+      .model { display: grid; gap: 6px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+      .model:last-child { border-bottom: 0; }
+      .model[data-selected="true"] .name { color: var(--accent); }
+      .model-head .btn { padding: 6px 12px; font-size: 13px; }
+      .model-meta, .model-status, .bar { margin-left: 26px; }
       .model-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .model-head label { display: flex; align-items: center; gap: 8px; font-weight: 600; flex: 1; min-width: 160px; }
-      .model-meta { font-size: 12px; color: var(--text-2); }
+      .model-meta { font-size: 12px; color: var(--text-2); line-height: 1.5; max-width: 52ch; }
       .model-actions { display: flex; gap: 8px; align-items: center; }
       .bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
       .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
@@ -33,8 +39,8 @@
       .model-status[data-kind="error"] { color: var(--danger); }
       .model-status[data-kind="ok"] { color: var(--ok); }
       #source-hint[data-required="true"] { color: var(--warn); font-weight: 600; }
-      .warn { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12px; margin: 8px 0; }
-      .advanced { margin-top: 14px; }
+      .warn { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12px; margin: 12px 0; }
+      .advanced { margin-top: 20px; }
       .advanced summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
       input[type="url"] { width: 100%; }
       code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
@@ -44,7 +50,7 @@
     <main>
       <h1>Realtime subtitles</h1>
 
-      <section class="card">
+      <section>
         <h2>Captions</h2>
         <div class="row">
           <label class="label" for="opacity">Background opacity <span class="value" id="opacity-value"></span></label>
@@ -59,7 +65,7 @@
         <div class="actions"><button id="reset-position" class="btn" type="button">Reset position and size</button></div>
       </section>
 
-      <section class="card">
+      <section>
         <h2>Translation</h2>
         <div class="row">
           <span class="label" id="translate-label">What to show</span>
@@ -75,7 +81,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section>
         <h2>Models for the Browser mode</h2>
         <p class="hint" style="margin-top: 0">
           Nothing is downloaded until you press <b>Download</b>. Files stay on this computer and work offline afterwards.
@@ -84,7 +90,7 @@
         <div id="gpu-warning" class="warn" hidden>This browser has no WebGPU. Only Whisper works here, and slowly.</div>
         <h3>Speech recognition</h3>
         <div id="asr-models" class="models"></div>
-        <div class="row" id="source-row">
+        <div class="row" id="source-row" style="margin-top: 20px">
           <label class="label" id="source-label" for="sourceLang">Language of the audio</label>
           <select id="sourceLang"></select>
           <p class="hint" id="source-hint"></p>
@@ -101,7 +107,7 @@
         </details>
       </section>
 
-      <section class="card">
+      <section>
         <h2>Companion program</h2>
         <p class="hint" style="margin-top: 0">
           In the "Computer" mode the extension talks to model servers on <code>127.0.0.1:8083</code> (speech) and
@@ -110,7 +116,7 @@
         </p>
       </section>
 
-      <div id="saved" role="status"></div>
+      <div id="saved" role="status" style="padding-top: 8px"></div>
     </main>
     <script type="module" src="./options.ts"></script>
   </body>

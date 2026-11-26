@@ -8,6 +8,8 @@ export function configureRuntime(modelHost: string, wasmBase: string): Device {
   env.allowRemoteModels = true;
   env.remoteHost = modelHost.endsWith('/') ? modelHost : `${modelHost}/`;
   env.useBrowserCache = true;
+  // ONNX Runtime warns about shape ops it keeps on the CPU. That is by design and only fills the extension's error list.
+  env.backends.onnx.logLevel = 'error';
   const wasm = env.backends.onnx.wasm;
   if (wasm) {
     wasm.wasmPaths = wasmBase;

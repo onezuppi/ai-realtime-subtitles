@@ -49,6 +49,8 @@ export async function stopSession(): Promise<void> {
   const tabId = status.tabId;
   setStatus({ tabId: null, state: 'off' });
   await chrome.runtime.sendMessage({ type: 'offscreen-stop' } satisfies Message).catch(() => {});
+  // Closing the document frees the models, the GPU memory and the audio objects for certain; a live document keeps what a model worker left behind.
+  await chrome.offscreen.closeDocument().catch(() => {});
   if (tabId !== null) await chrome.tabs.sendMessage(tabId, { type: 'caption', tabId, text: '' } satisfies Message).catch(() => {});
 }
 

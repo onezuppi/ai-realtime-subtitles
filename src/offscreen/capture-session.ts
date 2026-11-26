@@ -26,6 +26,13 @@ export async function startCapture(streamId: string, tabId: number, settings: Se
         : { audio: true },
     );
     cleanup.push(() => media.getTracks().forEach(track => track.stop()));
+    // Capturing a tab mutes it, so play the sound back at once. Model loading can take minutes and must not silence the tab.
+    stage = 'audio';
+    const context = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
+    cleanup.push(() => context.close());
+    await context.audioWorklet.addModule(chrome.runtime.getURL('capture-worklet.js'));
+    const source = context.createMediaStreamSource(media);
+    if (fromTab) source.connect(context.destination);
     stage = 'models';
     const backend = createBackend(settings);
     await backend.start(progress =>
@@ -33,14 +40,8 @@ export async function startCapture(streamId: string, tabId: number, settings: Se
     );
     cleanup.push(() => backend.stop());
     stage = 'audio';
-    const context = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
-    cleanup.push(() => context.close());
-    await context.audioWorklet.addModule(chrome.runtime.getURL('capture-worklet.js'));
-    const source = context.createMediaStreamSource(media);
     const node = new AudioWorkletNode(context, 'capture', { numberOfInputs: 1, numberOfOutputs: 0 });
     source.connect(node);
-    // Capturing a tab mutes it, so play the sound back.
-    if (fromTab) source.connect(context.destination);
 
     const stream = new SubtitleStream({
       transcribe: async samples => (await backend.transcribe(samples, AUDIO_SAMPLE_RATE)).text,
