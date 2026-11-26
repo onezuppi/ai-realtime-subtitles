@@ -100,10 +100,10 @@ class Bridge:
                 if path == "/start":
                     state = servers.start(self.config, names=_start_targets(message.get("body")))
                 else:
-                    state = {name: servers.is_ready(port) for name, port in self._ports.items()}
+                    state = {name: servers.server_ready(self.config, name) for name in self._ports}
                 return {**reply, "ok": all(state.values()), "status": 200, "data": state}
-            if self.config.autostart and not servers.is_ready(self._ports[target]):
-                servers.start(self.config)
+            if self.config.autostart and not servers.server_ready(self.config, target):
+                servers.start(self.config, names=(target,))
             timeout = HEALTH_TIMEOUT if path == "/health" else REQUEST_TIMEOUT
             result = self._post(self._ports[target], path, method, message.get("body"), timeout)
             return {**reply, **result}

@@ -71,4 +71,4 @@ def install(extension_ids: list[str], browsers: list[str], platform: str | None 
 
 def uninstall(platform: str | None = None, home: Path | None = None) -> list[str]:
     system = platform_key(platform)
-    return windows.uninstall() if system == "windows" else posix.uninstall(system, home)
+    return windows.uninstall(app_dir()) if system == "windows" else posix.uninstall(system, home)

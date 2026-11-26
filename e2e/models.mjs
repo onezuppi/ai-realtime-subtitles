@@ -5,11 +5,11 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createReadStream, statSync, writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const MODELS = 'C:\\Users\\pax20\\subtitle-anything-local\\models';
-const BRAVE = 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe';
+const MODELS = process.env.MODELS_DIR ?? join(process.env.USERPROFILE ?? '', 'subtitle-anything-local', 'models');
+const BRAVE = process.env.BRAVE_PATH ?? 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe';
 const PORT = 9334;
 const MIRROR = 8766;
 const SPEED = Number(process.env.SPEED_MBPS ?? 60); // MB per second, so the progress is visible
@@ -24,7 +24,9 @@ const mirror = createServer((req, res) => {
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   if (!match) return res.writeHead(404).end();
   const override = match[1].includes('cohere-transcribe') ? process.env.COHERE_DIR : undefined;
+  const base = override ?? MODELS;
   const file = override ? join(override, ...match[2].split('/')) : join(MODELS, ...match[1].split('/'), ...match[2].split('/'));
+  if (!resolve(file).startsWith(resolve(base) + sep)) return res.writeHead(403).end(); // no ../ out of the models folder
   let size;
   try { size = statSync(file).size; } catch { return res.writeHead(404).end(); }
   res.writeHead(200, { 'content-length': size, 'content-type': 'application/octet-stream' });
@@ -35,8 +37,10 @@ const mirror = createServer((req, res) => {
 }).listen(MIRROR, '127.0.0.1');
 
 const pageServer = createServer((req, res) => {
-  const file = req.url === '/' ? 'page.html' : req.url.slice(1);
-  let body; try { body = readFileSync(join(import.meta.dirname, file)); } catch { return res.writeHead(404).end(); }
+  const file = req.url === '/' ? 'page.html' : decodeURIComponent(req.url.split('?')[0].slice(1));
+  const path = resolve(import.meta.dirname, file);
+  if (!path.startsWith(import.meta.dirname + sep)) return res.writeHead(403).end(); // stay inside e2e/
+  let body; try { body = readFileSync(path); } catch { return res.writeHead(404).end(); }
   res.writeHead(200, { 'access-control-allow-origin': '*', 'content-type': file.endsWith('.wav') ? 'audio/wav' : 'text/html; charset=utf-8' }).end(body);
 }).listen(8765, '127.0.0.1');
 
@@ -139,9 +143,10 @@ try {
   }
 } catch (error) {
   note('error', String(error));
+  process.exitCode = 1; // a failed run must fail the command that started it
 } finally {
   writeFileSync(out('models-result.json'), JSON.stringify(log, null, 2));
   browser.kill(); mirror.close(); pageServer.close();
   spawn('taskkill', ['/PID', String(browser.pid), '/T', '/F'], { stdio: 'ignore' });
-  setTimeout(() => process.exit(0), 500);
+  setTimeout(() => process.exit(process.exitCode ?? 0), 500);
 }

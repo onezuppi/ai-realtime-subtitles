@@ -162,7 +162,10 @@ def extract(archive: Path, target: Path) -> None:
             if member.issym() or member.islnk():
                 link = member.linkname if member.islnk() else str(Path(member.name).parent / member.linkname)
                 _safe(target, link)
-        tarred.extractall(target)
+        if hasattr(tarfile, "data_filter"):  # Python 3.12+ (and security backports): refuses links, devices, setuid
+            tarred.extractall(target, filter="data")
+        else:
+            tarred.extractall(target)
 
 
 def download_server() -> Path:

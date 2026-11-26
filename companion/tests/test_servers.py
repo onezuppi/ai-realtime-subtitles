@@ -66,10 +66,10 @@ class BuildCommandsTest(TempDataFolder):
 
 class StartStopTest(TempDataFolder):
     def start(self, ready, popen):
-        with mock.patch.object(servers, "is_ready", side_effect=lambda port, timeout=1.5: port in ready), \
+        with mock.patch.object(servers, "is_ready", side_effect=lambda port, timeout=1.5, alias=None: port in ready), \
                 mock.patch.object(servers, "model_files"), \
                 mock.patch.object(servers, "find_llama_server", return_value=Path("llama-server")), \
-                mock.patch("subprocess.Popen", side_effect=popen):
+                mock.patch.object(servers, "_is_llama_server", return_value=False),                 mock.patch("subprocess.Popen", side_effect=popen):
             return servers.start(self.config, wait_seconds=5)
 
     def test_starting_one_server_keeps_the_pid_of_the_other(self):
@@ -84,7 +84,7 @@ class StartStopTest(TempDataFolder):
         self.assertEqual(self.start(ready, popen), {"asr": True, "translate": True})
         self.assertEqual(servers.pid_file("asr").read_text(), "111")
         self.assertEqual(servers.pid_file("translate").read_text(), "222")
-        with mock.patch.object(servers, "_kill", return_value=True) as kill:
+        with mock.patch.object(servers, "_kill", return_value=True) as kill,                 mock.patch.object(servers, "_is_llama_server", return_value=True):
             self.assertEqual(servers.stop(), 2)
         self.assertEqual(sorted(call.args[0] for call in kill.call_args_list), ["111", "222"])
         self.assertEqual(list(self.folder.glob("*.pid")), [])
@@ -98,7 +98,7 @@ class StartStopTest(TempDataFolder):
             return FakeProcess(444)
 
         ready = set()
-        with mock.patch.object(servers, "is_ready", side_effect=lambda port, timeout=1.5: port in ready),                 mock.patch.object(servers, "find_llama_server", return_value=Path("llama-server")),                 mock.patch("subprocess.Popen", side_effect=popen):
+        with mock.patch.object(servers, "is_ready", side_effect=lambda port, timeout=1.5, alias=None: port in ready),                 mock.patch.object(servers, "find_llama_server", return_value=Path("llama-server")),                 mock.patch.object(servers, "_is_llama_server", return_value=False),                 mock.patch("subprocess.Popen", side_effect=popen):
             (self.root / self.config.asr_model).write_text("")
             (self.root / self.config.asr_mmproj).write_text("")  # no translation model on disk
             state = servers.start(self.config, wait_seconds=5, names=("asr",))
@@ -110,7 +110,7 @@ class StartStopTest(TempDataFolder):
     def test_stop_also_reads_the_old_single_pid_file(self):
         self.folder.mkdir()
         (self.folder / "servers.pid").write_text("10\n20")
-        with mock.patch.object(servers, "_kill", return_value=True) as kill:
+        with mock.patch.object(servers, "_kill", return_value=True) as kill,                 mock.patch.object(servers, "_is_llama_server", return_value=True):
             self.assertEqual(servers.stop(), 2)
         self.assertEqual([call.args[0] for call in kill.call_args_list], ["10", "20"])
         self.assertFalse((self.folder / "servers.pid").exists())
@@ -126,6 +126,46 @@ class StartStopTest(TempDataFolder):
             self.start(set(), lambda command, **kwargs: FakeProcess(333, code=1))
         self.assertIn("exited with code 1", str(caught.exception))
         self.assertIn("failed to load model", str(caught.exception))
+
+    def test_stop_spares_a_pid_that_is_not_a_llama_server(self):
+        self.folder.mkdir()
+        servers.pid_file("asr").write_text("999")
+        with mock.patch.object(servers, "_kill", return_value=True) as kill,                 mock.patch.object(servers, "_is_llama_server", return_value=False):
+            self.assertEqual(servers.stop(), 0)
+        kill.assert_not_called()
+
+    def test_a_server_that_is_still_loading_is_not_launched_twice(self):
+        self.folder.mkdir()
+        servers.pid_file("asr").write_text("111")
+        servers.pid_file("translate").write_text("222")
+        with mock.patch.object(servers, "is_ready", side_effect=lambda port, timeout=1.5, alias=None: False),                 mock.patch.object(servers, "_is_llama_server", return_value=True),                 mock.patch("subprocess.Popen") as popen:
+            servers.start(self.config, wait_seconds=0)
+        popen.assert_not_called()
+
+    def test_a_failed_start_stops_the_other_server_and_keeps_foreign_pid_files(self):
+        self.folder.mkdir()
+        (self.folder / "servers.log").write_text("boom\n")
+        procs = iter([FakeProcess(501), FakeProcess(502, code=1)])
+        with mock.patch.object(servers, "_kill", return_value=True) as kill,                 self.assertRaises(servers.SetupError):
+            self.start(set(), lambda command, **kwargs: next(procs))
+        self.assertIn("501", [call.args[0] for call in kill.call_args_list])
+        self.assertEqual(list(self.folder.glob("*.pid")), [])
+
+    def test_ready_requires_the_expected_alias(self):
+        import io
+        import json as _json
+
+        class Reply(io.BytesIO):
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+
+        def open_(url, timeout=0):
+            return Reply(b"{}" if url.endswith("/health") else _json.dumps({"data": [{"id": "other"}]}).encode())
+
+        with mock.patch.object(servers.localhttp.opener, "open", side_effect=open_):
+            self.assertTrue(servers.is_ready(1))
+            self.assertFalse(servers.is_ready(1, alias="qwen3-asr"))
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
 """Windows: one registry key per browser under HKEY_CURRENT_USER that points to the manifest file."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from .. import HOST_NAME
-from .manifest import MANIFEST_FILE
 
 WINDOWS_KEYS = {
     "chrome": r"Software\Google\Chrome\NativeMessagingHosts",
@@ -52,22 +52,40 @@ def registered() -> list[str]:
     return result
 
 
+def _manifest_file(folder: Path, target: str) -> Path:
+    return folder / f"{HOST_NAME}.{target}.json"
+
+
+def _merged(content: str, existing: Path) -> str:
+    """Add the origins of an earlier manifest at this key to the new ones: two installs for different
+    extension IDs (a store build and an unpacked build) must not lock each other out."""
+    try:
+        old = json.loads(existing.read_text(encoding="utf-8")).get("allowed_origins", [])
+        new = json.loads(content)
+    except (OSError, ValueError, AttributeError):
+        return content
+    if not isinstance(old, list) or not isinstance(new, dict):
+        return content
+    new["allowed_origins"] = list(dict.fromkeys([*new.get("allowed_origins", []), *[o for o in old if isinstance(o, str)]]))
+    return json.dumps(new, indent=2)
+
+
 def install(content: str, browsers: list[str], folder: Path) -> list[str]:
-    """Write the manifest into the folder and point each browser's registry key at it."""
+    """Write one manifest per registry key into the folder and point each key at its own manifest."""
     import winreg
 
-    manifest_path = folder / MANIFEST_FILE
-    manifest_path.write_text(content, encoding="utf-8")
     done = []
     for name in browsers:
         for target in dict.fromkeys([name, ALSO_READS.get(name, name)]):
+            manifest_path = _manifest_file(folder, target)
+            manifest_path.write_text(_merged(content, manifest_path), encoding="utf-8")
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _host_key(target)) as key:
                 winreg.SetValueEx(key, "", 0, winreg.REG_SZ, str(manifest_path))
         done.append(name)
     return done
 
 
-def uninstall() -> list[str]:
+def uninstall(folder: Path | None = None) -> list[str]:
     import winreg
 
     removed = []
@@ -77,4 +95,6 @@ def uninstall() -> list[str]:
             removed.append(name)
         except FileNotFoundError:
             pass
+        if folder is not None:
+            _manifest_file(folder, name).unlink(missing_ok=True)
     return removed

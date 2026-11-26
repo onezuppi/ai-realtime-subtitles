@@ -138,6 +138,22 @@ class WindowsRegistryTest(unittest.TestCase):
             rf"Software\Google\Chrome\NativeMessagingHosts\{HOST_NAME}",
         ]))
 
+    def test_each_key_gets_its_own_manifest_that_keeps_earlier_origins(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            fake = mock.MagicMock()
+            fake.HKEY_CURRENT_USER = "HKCU"
+            with mock.patch.dict("sys.modules", {"winreg": fake}):
+                windows.install('{"allowed_origins": ["chrome-extension://a/"]}', ["brave"], folder)
+                windows.install('{"allowed_origins": ["chrome-extension://b/"]}', ["chrome"], folder)
+                brave = json.loads((folder / f"{HOST_NAME}.brave.json").read_text(encoding="utf-8"))
+                chrome = json.loads((folder / f"{HOST_NAME}.chrome.json").read_text(encoding="utf-8"))
+                self.assertEqual(brave["allowed_origins"], ["chrome-extension://a/"])
+                self.assertEqual(chrome["allowed_origins"], ["chrome-extension://b/", "chrome-extension://a/"])
+                fake.DeleteKey.side_effect = FileNotFoundError
+                windows.uninstall(folder)
+            self.assertEqual(list(folder.glob("*.json")), [])
+
     def test_other_browsers_get_only_their_own_key(self):
         self.assertEqual(self._install(["edge"]), [rf"Software\Microsoft\Edge\NativeMessagingHosts\{HOST_NAME}"])
 

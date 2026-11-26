@@ -1,6 +1,6 @@
 import type { Message } from '../shared/messages';
 import { callNative } from './native-port';
-import { applyOffscreenStatus, failSession, getStatus, startSession, stopSession } from './session';
+import { applyOffscreenStatus, failSession, getStatus, reinjectOverlay, restored, startSession, stopSession } from './session';
 
 chrome.runtime.onMessage.addListener((message: Message, _sender, respond) => {
   switch (message.type) {
@@ -14,8 +14,8 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, respond) => {
       void stopSession();
       break;
     case 'popup-status':
-      respond(getStatus());
-      break;
+      restored.then(() => respond(getStatus()));
+      return true; // answer after the saved status is read
     case 'caption':
       chrome.tabs.sendMessage(message.tabId, message).catch(() => {});
       break;
@@ -27,4 +27,8 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, respond) => {
 
 chrome.tabs.onRemoved.addListener(tabId => {
   if (tabId === getStatus().tabId) void stopSession();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.status === 'complete') void reinjectOverlay(tabId);
 });

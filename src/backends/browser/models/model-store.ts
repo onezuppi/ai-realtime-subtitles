@@ -5,7 +5,8 @@ import { ASR_ENGINES, MT_ENGINES, type AsrEngineId, type MtEngineId } from '../e
 
 export type ModelRef = { kind: 'asr'; id: AsrEngineId } | { kind: 'mt'; id: MtEngineId };
 
-type Downloaded = Record<string, { bytes: number; at: number }>;
+/** `files` lists the cached URLs at the time the download finished; older records have none. */
+type Downloaded = Record<string, { bytes: number; at: number; files?: string[] }>;
 
 export const engineOf = (ref: ModelRef) => (ref.kind === 'asr' ? ASR_ENGINES[ref.id] : MT_ENGINES[ref.id]);
 export const repoOf = (ref: ModelRef): string => engineOf(ref).repo;
@@ -14,19 +15,27 @@ export const keyOf = (ref: ModelRef) => `${ref.kind}:${ref.id}`;
 export const readDownloaded = async (): Promise<Downloaded> =>
   ((await chrome.storage.local.get(DOWNLOADED_MODELS_KEY))[DOWNLOADED_MODELS_KEY] as Downloaded | undefined) ?? {};
 
-export const markDownloaded = async (ref: ModelRef, bytes: number): Promise<void> => {
-  const downloaded = await readDownloaded();
-  await chrome.storage.local.set({ [DOWNLOADED_MODELS_KEY]: { ...downloaded, [keyOf(ref)]: { bytes, at: Date.now() } } });
+const cachedUrls = async (repo: string): Promise<string[]> => {
+  const cache = await caches.open(MODEL_CACHE_NAME);
+  return (await cache.keys()).map(request => request.url).filter(url => url.includes(`/${repo}/`));
 };
 
-/** True when a finished download is recorded and the files are still in the cache. */
+export const markDownloaded = async (ref: ModelRef, bytes: number): Promise<void> => {
+  const downloaded = await readDownloaded();
+  const repo = repoOf(ref);
+  const files = repo ? await cachedUrls(repo).catch(() => undefined) : undefined;
+  await chrome.storage.local.set({ [DOWNLOADED_MODELS_KEY]: { ...downloaded, [keyOf(ref)]: { bytes, at: Date.now(), files } } });
+};
+
+/** True when a finished download is recorded and every file of it is still in the cache (no network is used). */
 export async function isDownloaded(ref: ModelRef): Promise<boolean> {
-  if (!(keyOf(ref) in (await readDownloaded()))) return false;
+  const record = (await readDownloaded())[keyOf(ref)];
+  if (!record) return false;
   const repo = repoOf(ref);
   if (!repo) return true;
   try {
-    const cache = await caches.open(MODEL_CACHE_NAME);
-    return (await cache.keys()).some(request => request.url.includes(`/${repo}/`));
+    const present = new Set(await cachedUrls(repo));
+    return record.files?.length ? record.files.every(url => present.has(url)) : present.size > 0;
   } catch {
     return false;
   }

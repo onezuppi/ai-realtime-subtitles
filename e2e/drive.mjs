@@ -4,10 +4,10 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const BRAVE = 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe';
+const BRAVE = process.env.BRAVE_PATH ?? 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe';
 const PORT = 9333;
 const profile = mkdtempSync(join(tmpdir(), 'ars-e2e-'));
 const MODE = process.env.MODE ?? 'http';
@@ -23,9 +23,11 @@ const out = (name) => join(import.meta.dirname, name);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const server = createServer((req, res) => {
-  const file = req.url === '/' ? 'page.html' : req.url.slice(1);
+  const file = req.url === '/' ? 'page.html' : decodeURIComponent(req.url.split('?')[0].slice(1));
+  const path = resolve(import.meta.dirname, file);
+  if (!path.startsWith(import.meta.dirname + sep)) return res.writeHead(403).end(); // stay inside e2e/
   try {
-    const body = readFileSync(join(import.meta.dirname, file));
+    const body = readFileSync(path);
     res.writeHead(200, { 'content-type': file.endsWith('.wav') ? 'audio/wav' : 'text/html; charset=utf-8', 'accept-ranges': 'bytes' });
     res.end(body);
   } catch { res.writeHead(404).end(); }
@@ -204,11 +206,12 @@ try {
   await popup.evaluate(`chrome.runtime.sendMessage({type:'popup-stop'}).then(()=> 'stopped')`);
 } catch (error) {
   note('error', String(error));
+  process.exitCode = 1; // a failed run must fail the command that started it
 } finally {
   writeFileSync(out('result.json'), JSON.stringify(log, null, 2));
   browser.kill(); server.close();
   spawn('taskkill', ['/PID', String(browser.pid), '/T', '/F'], { stdio: 'ignore' });
-  setTimeout(() => process.exit(0), 500);
+  setTimeout(() => process.exit(process.exitCode ?? 0), 500);
 }
 
 

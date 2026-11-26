@@ -8,8 +8,27 @@ let status: Status = { tabId: null, state: 'off' };
 
 export const getStatus = (): Status => status;
 
+const STATUS_KEY = 'session-status';
+
+/**
+ * The service worker is unloaded after a while and starts empty, while capture goes on in the offscreen document.
+ * The status is kept in session storage and read back when the worker starts again.
+ */
+export const restored: Promise<void> = (async () => {
+  try {
+    const saved = (await chrome.storage.session.get(STATUS_KEY))[STATUS_KEY] as Status | undefined;
+    if (!saved || saved.state === 'off') return;
+    const offscreen = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT] });
+    if (offscreen.length && status.state === 'off') status = saved;
+    else if (!offscreen.length) await chrome.storage.session.remove(STATUS_KEY);
+  } catch {
+    // no session storage: the status simply starts as "off"
+  }
+})();
+
 const setStatus = (next: Status) => {
   status = next;
+  void chrome.storage.session.set({ [STATUS_KEY]: next }).catch(() => {});
   void chrome.action.setBadgeText({ text: next.state === 'off' ? '' : next.state === 'error' ? '!' : 'ON' });
   void chrome.runtime.sendMessage({ type: 'popup-status-update', status } satisfies Message).catch(() => {});
 };
@@ -52,6 +71,20 @@ export async function stopSession(): Promise<void> {
   // Closing the document frees the models, the GPU memory and the audio objects for certain; a live document keeps what a model worker left behind.
   await chrome.offscreen.closeDocument().catch(() => {});
   if (tabId !== null) await chrome.tabs.sendMessage(tabId, { type: 'caption', tabId, text: '' } satisfies Message).catch(() => {});
+}
+
+/**
+ * The captured tab loaded a new page: its overlay is gone, so inject it again. The access that activeTab gave ends
+ * when the tab moves to another site, and then the injection fails. The session stops in that case, so that the
+ * popup never shows "ON" for a tab that has no captions.
+ */
+export async function reinjectOverlay(tabId: number): Promise<void> {
+  if (tabId !== status.tabId || status.state === 'off' || status.state === 'error') return;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  } catch {
+    await stopSession();
+  }
 }
 
 export const failSession = (error: unknown) => setStatus({ tabId: status.tabId, state: 'error', detail: String(error) });
