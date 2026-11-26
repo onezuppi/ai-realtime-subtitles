@@ -91,7 +91,7 @@ def cmd_install(args: argparse.Namespace, config: Config) -> int:
     print("registered for:", ", ".join(done))
     if _wants_download(args, config):
         download.run(config)
-    print("Restart the browser, then pick 'Program via bridge' in the extension popup.")
+    print("Restart the browser, then choose 'Bridge' in the extension popup.")
     return 0
 
 
