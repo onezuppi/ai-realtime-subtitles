@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Realtime Subtitles",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Real-time subtitles and translation of tab audio with local models.",
   "minimum_chrome_version": "116",
   "permissions": [

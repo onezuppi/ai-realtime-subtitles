@@ -19,6 +19,7 @@ if (!process.env.NO_PROFILE_HOST) writeFileSync(join(profile, 'NativeMessagingHo
   name: 'com.ai_realtime_subtitles.companion', description: 'e2e', path: bat, type: 'stdio',
   allowed_origins: ['chrome-extension://fdpmchjhigcggmmcilchcakdnocflcbf/'],
 }));
+class ProbeDone extends Error {}
 const out = (name) => join(import.meta.dirname, name);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -169,6 +170,15 @@ try {
     const back = await pageCdp.evaluate(hasOverlay);
     note('overlayAfterNavigation', back);
     if (!back) throw new Error('overlay missing after navigation');
+    // Another site: host access and activeTab no longer cover it, so the session must stop instead of showing "ON".
+    const other = createServer((req, res) => res.writeHead(200, { 'content-type': 'text/html' }).end('<title>other</title>')).listen(8765, '127.0.0.2');
+    await pageCdp.send('Page.navigate', { url: 'http://127.0.0.2:8765/' });
+    await sleep(3000);
+    const stopped = await popup.evaluate(`chrome.runtime.sendMessage({type:'popup-status'})`);
+    note('statusAfterOtherSite', stopped);
+    other.close();
+    if (stopped?.state !== 'off') throw new Error('session still running on a tab without an overlay');
+    throw new ProbeDone('lifecycle'); // the remaining steps need a live session
   }
 
   // Drag the box, then resize it by the corner grip, and read the saved geometry.
@@ -224,8 +234,11 @@ try {
   note('captionsTotal', (await swCdp.evaluate('globalThis.__captions')).length);
   await popup.evaluate(`chrome.runtime.sendMessage({type:'popup-stop'}).then(()=> 'stopped')`);
 } catch (error) {
+  if (error instanceof ProbeDone) note('probe', `${error.message} ok`);
+  else {
   note('error', String(error));
   process.exitCode = 1; // a failed run must fail the command that started it
+  }
 } finally {
   writeFileSync(out('result.json'), JSON.stringify(log, null, 2));
   browser.kill(); server.close();
